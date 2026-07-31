@@ -99,7 +99,7 @@ const Inventory = {
     const body = `
       <div class="form-group">
         <label>食材名</label>
-        <input type="text" id="inv-name" class="input" value="${Utils.esc(item.name)}">
+        <input type="text" id="inv-name" class="input" value="${Utils.esc(item.name)}" list="ingredient-name-list">
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -219,7 +219,7 @@ const Inventory = {
 
   /**
    * 不足材料をチェックし、買い物リストへ追加する（「不足材料を追加」ボタン用）
-   * 在庫が存在しない、または数量0の場合を「不足」とみなす。
+   * 在庫が存在しない、または必要数に満たない場合を「不足」とみなす。
    * 少々/適量の食材は判定対象外。
    */
   addMissingMaterialsToShoppingList(materials, recipeName) {
@@ -233,10 +233,12 @@ const Inventory = {
         return sum + (converted !== null ? converted : 0);
       }, 0);
 
-      if (invList.length === 0 || totalAvailable <= 0) {
+      // 在庫が全く無い場合だけでなく、必要数に満たない場合も不足として扱う
+      if (totalAvailable < m.quantity) {
+        const shortfall = round2(m.quantity - totalAvailable);
         Storage.addShoppingItem({
           name: m.name,
-          quantity: m.quantity,
+          quantity: shortfall > 0 ? shortfall : m.quantity,
           unit: m.unit,
           reason: `レシピ: ${recipeName}`,
         });

@@ -130,10 +130,9 @@ const Purchase = {
     if (field === "name") {
       this.rows[idx].name = value;
       const suggested = Utils.suggestUnit(value.trim());
-      if (suggested) {
+      if (suggested && suggested !== this.rows[idx].unit) {
         this.rows[idx].unit = suggested;
-        this.renderRows();
-        return;
+        this._syncRowUnitSelect(idx, suggested);
       }
     } else if (field === "quantity") {
       this.rows[idx].quantity = parseFloat(value);
@@ -143,6 +142,17 @@ const Purchase = {
       this.rows[idx].price = parseFloat(value);
     }
     this.updateTotal();
+  },
+
+  /** 食材名から単位が自動推定された際、単位<select>の選択状態だけを反映する（行全体は再描画しない） */
+  _syncRowUnitSelect(idx, unit) {
+    const wrap = document.getElementById("pur-rows");
+    if (!wrap) return;
+    const rows = wrap.querySelectorAll(".purchase-row");
+    const row = rows[idx];
+    if (!row) return;
+    const select = row.querySelector(".row-unit");
+    if (select) select.value = unit;
   },
 
   // ------------------------------------------------------
@@ -199,7 +209,19 @@ const Purchase = {
       Toast.show("外食を登録しました");
     }
 
+    // 食材行・金額などの入力内容はリセットするが、日付・店名・区分は直前の入力を引き継ぐ
+    // （同じ日・同じ店でまとめて何回かに分けて登録したい場合に、毎回入力し直さずに済むようにするため）
+    this.resetFormKeepingDateStore(date, store);
+  },
+
+  resetFormKeepingDateStore(date, store) {
+    const keepType = this.type;
     this.render();
+    document.getElementById("pur-date").value = date;
+    document.getElementById("pur-store").value = store;
+    if (keepType === "eatout") {
+      this.setType("eatout");
+    }
   },
 
   // ------------------------------------------------------

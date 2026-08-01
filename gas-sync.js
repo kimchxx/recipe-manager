@@ -187,7 +187,23 @@ const GasSync = {
     return { id: Utils.uid("SL"), name: row["食材"], quantity: row["数量"] === "" ? "" : Number(row["数量"]), unit: row["単位"], reason: row["理由"] || "", status: row["状態"] || "未購入" };
   },
   _mapCookedFromSheet(row) {
-    return { id: Utils.uid("CH"), recipeId: row["レシピID"], date: GasSync._toDateStr(row["日付"]) };
+    let materials = [];
+    try {
+      materials = row["使用食材"] ? JSON.parse(row["使用食材"]) : [];
+    } catch (e) {
+      materials = [];
+    }
+    const manual = row["手動追加"];
+    return {
+      id: Utils.uid("CH"),
+      date: GasSync._toDateStr(row["日付"]),
+      name: row["料理名"] || "",
+      recipeId: row["レシピID"] || null,
+      servings: Number(row["人数"]) || 1,
+      cost: Number(row["食費"]) || 0,
+      materials,
+      isManual: manual === true || manual === "TRUE",
+    };
   },
   _mapBudgetFromSheet(row) {
     return { yearMonth: row["対象年月"], budget: Number(row["食費予算"]) || 0 };
@@ -235,7 +251,9 @@ const GasSync = {
   },
   pushCookedHistory() {
     this._debouncedPush("cookedHistory", () => Storage.getCookedHistory().map((h) => ({
-      "レシピID": h.recipeId, "日付": h.date,
+      "日付": h.date, "料理名": h.name || "", "レシピID": h.recipeId || "",
+      "人数": h.servings || 1, "食費": h.cost || 0,
+      "使用食材": JSON.stringify(h.materials || []), "手動追加": h.isManual ? "TRUE" : "FALSE",
     })));
   },
   pushBudgets() {

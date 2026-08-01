@@ -465,6 +465,33 @@ p { margin: 0; }
 
 .recipe-actions { padding: 20px 18px; display: flex; flex-direction: column; gap: 10px; }
 
+.cook-buttons-row { display: flex; gap: 10px; }
+.cook-buttons-row .btn { flex: 1; }
+
+/* --- 材料変更して作成モーダル --- */
+.cook-custom-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+.cook-custom-row:last-child { border-bottom: none; }
+.cook-custom-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+.cook-custom-checkbox input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--color-accent); flex-shrink: 0; }
+.cook-custom-qty { padding: 8px; font-size: 13.5px; }
+.cook-custom-unit { font-size: 13px; color: var(--color-text-sub); }
+
+/* --- 調理履歴カード --- */
+.cooked-history-card { display: flex; flex-direction: column; }
+
 /* ==========================================================
    フォーム共通
    ========================================================== */
@@ -534,6 +561,12 @@ label { font-size: 13px; color: var(--color-text-sub); font-weight: 500; }
   border-radius: var(--radius-round);
   font-size: 13px;
   flex-shrink: 0;
+}
+
+.tax-convert-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 
 .purchase-total {

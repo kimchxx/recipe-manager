@@ -204,17 +204,33 @@ const Storage = {
     this.setShoppingList(this.getShoppingList().filter((i) => i.id !== id));
   },
 
-  // ---------------- 調理履歴（栄養分析用） ----------------
+  // ---------------- 調理履歴 ----------------
+  // entry: { id, date, recipeId(手動追加の場合はnull), name, servings, cost, materials, isManual }
   getCookedHistory() { return this._get(STORAGE_KEYS.cookedHistory); },
   setCookedHistory(list) {
     this._set(STORAGE_KEYS.cookedHistory, list);
     if (typeof GasSync !== "undefined") GasSync.pushCookedHistory();
+  },
+  getCookedHistoryById(id) {
+    return this.getCookedHistory().find((h) => h.id === id) || null;
   },
   addCookedHistory(entry) {
     const list = this.getCookedHistory();
     entry.id = "CH" + Date.now() + Math.floor(Math.random() * 1000);
     list.push(entry);
     this.setCookedHistory(list);
+    return entry;
+  },
+  updateCookedHistory(id, updates) {
+    const list = this.getCookedHistory();
+    const idx = list.findIndex((h) => h.id === id);
+    if (idx === -1) return null;
+    list[idx] = { ...list[idx], ...updates };
+    this.setCookedHistory(list);
+    return list[idx];
+  },
+  deleteCookedHistory(id) {
+    this.setCookedHistory(this.getCookedHistory().filter((h) => h.id !== id));
   },
 
   // ---------------- 月別食費予算 ----------------

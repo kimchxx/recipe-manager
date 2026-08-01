@@ -44,6 +44,10 @@ const Purchase = {
 
         <div id="pur-dynamic-area"></div>
 
+        <div class="tax-convert-row" id="pur-tax-convert-row">
+          <button class="btn btn-outline btn-sm" onclick="Purchase.convertToTaxIncluded()">税込価格に変換（+8%）</button>
+        </div>
+
         <div class="purchase-total">
           合計金額: <span id="pur-total">0円</span>
         </div>
@@ -59,6 +63,29 @@ const Purchase = {
   },
 
   // ------------------------------------------------------
+  // 税込価格への変換（レシートの税抜表示金額から税込金額を計算する用途）
+  // 自炊（食材購入）のときのみボタンを表示する
+  // ------------------------------------------------------
+  convertToTaxIncluded() {
+    const TAX_RATE = 0.08; // 食品の軽減税率を想定
+
+    let convertedCount = 0;
+    this.rows.forEach((r) => {
+      if (r.price !== "" && r.price !== null && r.price !== undefined && !isNaN(r.price)) {
+        r.price = Math.round(Number(r.price) * (1 + TAX_RATE));
+        convertedCount++;
+      }
+    });
+    // フォーカスを奪わないよう、行全体は再描画せず金額欄の表示だけを直接更新する
+    const priceInputs = document.querySelectorAll("#pur-rows .row-price");
+    this.rows.forEach((r, idx) => {
+      if (priceInputs[idx]) priceInputs[idx].value = r.price === "" ? "" : r.price;
+    });
+    this.updateTotal();
+    Toast.show(convertedCount > 0 ? `${convertedCount}件を税込価格（+8%）に変換しました` : "金額が入力されていません");
+  },
+
+  // ------------------------------------------------------
   // 区分切り替え（自炊 / 外食）
   // ------------------------------------------------------
   setType(type) {
@@ -66,6 +93,8 @@ const Purchase = {
     document.querySelectorAll("#pur-type-toggle .type-toggle-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.type === type);
     });
+    const taxRow = document.getElementById("pur-tax-convert-row");
+    if (taxRow) taxRow.style.display = type === "self" ? "flex" : "none";
     this.renderDynamicArea();
   },
 

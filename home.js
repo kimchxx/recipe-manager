@@ -51,6 +51,10 @@ const Home = {
           <div class="summary-label">登録レシピ数</div>
           <div class="summary-value">${Storage.getRecipes().length}<span class="summary-unit">件</span></div>
         </div>
+        <div class="card summary-card" onclick="App.navigate('cookedhistory')">
+          <div class="summary-label">調理履歴</div>
+          <div class="summary-value">${Storage.getCookedHistory().length}<span class="summary-unit">件</span></div>
+        </div>
       </div>
 
       <div class="home-quick-actions">

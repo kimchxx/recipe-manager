@@ -19,6 +19,7 @@ const App = {
     recipe: Recipe,
     analysis: Analysis,
     shopping: Shopping,
+    cookedhistory: CookedHistory,
   },
 
   async init() {

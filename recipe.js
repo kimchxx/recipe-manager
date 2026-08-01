@@ -196,7 +196,10 @@ const Recipe = {
         ${r.note ? `<h4 class="section-title-sm">備考</h4><div class="recipe-note">${Utils.esc(r.note).replace(/\n/g, "<br>")}</div>` : ""}
 
         <div class="recipe-actions">
-          <button class="btn btn-primary btn-block btn-lg" onclick="Recipe.cook('${r.id}')">🍳 作った</button>
+          <div class="cook-buttons-row">
+            <button class="btn btn-primary btn-lg" onclick="Recipe.cookNormal('${r.id}')">🍳 通常作成</button>
+            <button class="btn btn-outline" onclick="Recipe.openCookCustomize('${r.id}')">材料変更して作成</button>
+          </div>
           <button class="btn btn-outline btn-block" onclick="Recipe.addMissingToShoppingList('${r.id}')">不足材料を追加</button>
           <div class="form-row">
             <button class="btn btn-outline btn-block" onclick="Recipe.openForm('${r.id}')">編集</button>
@@ -207,19 +210,93 @@ const Recipe = {
     `;
   },
 
-  cook(id) {
+  /** 通常作成：レシピ通りの材料でワンタップで作る */
+  cookNormal(id) {
     const r = Storage.getRecipeById(id);
     if (!r) return;
     if (!confirm(`「${r.name}」を作りましたか？材料分の在庫を減らします。`)) return;
 
-    const shortages = Inventory.consumeForRecipe(r.materials);
-    Storage.addCookedHistory({ recipeId: r.id, date: Utils.todayISO() });
+    const materialsUsed = r.materials.map((m) => ({ name: m.name, quantity: m.quantity, unit: m.unit }));
+    const shortages = Inventory.consumeForRecipe(materialsUsed);
+    const cost = Utils.calcRecipeTotalCost(materialsUsed);
 
-    if (shortages.length > 0) {
-      Toast.show(`在庫が不足していました: ${shortages.join(" / ")}`);
-    } else {
-      Toast.show("在庫を更新しました");
+    Storage.addCookedHistory({
+      date: Utils.todayISO(), recipeId: r.id, name: r.name, servings: r.servings,
+      cost: cost !== null ? cost : 0, materials: materialsUsed, isManual: false,
+    });
+
+    Toast.show(shortages.length > 0
+      ? `在庫が不足していました: ${shortages.join(" / ")}`
+      : "在庫を更新し、調理履歴に記録しました");
+    this.openDetail(id);
+  },
+
+  /** 材料変更して作成：使用する材料のON/OFF・数量を確認してから作る */
+  openCookCustomize(id) {
+    const r = Storage.getRecipeById(id);
+    if (!r) return;
+    this._cookCustomRecipeId = id;
+    this._cookCustomState = r.materials.map((m) => ({ name: m.name, quantity: m.quantity, unit: m.unit, use: true }));
+
+    const body = `
+      <p class="settings-note">使用する材料にチェックを入れ、必要に応じて数量を変更してください。チェックを外した材料の在庫は減らしません。</p>
+      <div id="cook-custom-rows">${this._renderCookCustomRows()}</div>
+    `;
+    Modal.open(`「${r.name}」を材料変更して作る`, body, [
+      { label: "キャンセル", class: "btn-outline", onClick: () => Modal.close() },
+      { label: "この内容で作る", class: "btn-primary", onClick: () => Recipe.confirmCookCustom() },
+    ]);
+  },
+
+  _renderCookCustomRows() {
+    return this._cookCustomState.map((m, idx) => `
+      <div class="cook-custom-row">
+        <label class="cook-custom-checkbox">
+          <input type="checkbox" ${m.use ? "checked" : ""} onchange="Recipe._toggleCookMaterial(${idx})">
+          <span>${Utils.esc(m.name)}</span>
+        </label>
+        <input type="number" class="input cook-custom-qty" step="0.01" value="${m.quantity}"
+          oninput="Recipe._updateCookMaterialQty(${idx}, this.value)">
+        <span class="cook-custom-unit">${Utils.esc(m.unit)}</span>
+      </div>
+    `).join("");
+  },
+
+  // チェック・数量の変更は状態の更新のみ行い、モーダルの再描画は行わない
+  // （入力中に要素を作り直すとフォーカスが失われるため。参考: recipe.js全体で徹底している方針）
+  _toggleCookMaterial(idx) {
+    this._cookCustomState[idx].use = !this._cookCustomState[idx].use;
+  },
+  _updateCookMaterialQty(idx, value) {
+    this._cookCustomState[idx].quantity = parseFloat(value);
+  },
+
+  confirmCookCustom() {
+    const id = this._cookCustomRecipeId;
+    const r = Storage.getRecipeById(id);
+    if (!r) return;
+
+    const usedMaterials = this._cookCustomState
+      .filter((m) => m.use && !isNaN(m.quantity) && m.quantity > 0)
+      .map((m) => ({ name: m.name, quantity: m.quantity, unit: m.unit }));
+
+    if (usedMaterials.length === 0) {
+      alert("使用する材料を1つ以上選択してください。");
+      return;
     }
+
+    const shortages = Inventory.consumeForRecipe(usedMaterials);
+    const cost = Utils.calcRecipeTotalCost(usedMaterials);
+
+    Storage.addCookedHistory({
+      date: Utils.todayISO(), recipeId: r.id, name: r.name, servings: r.servings,
+      cost: cost !== null ? cost : 0, materials: usedMaterials, isManual: false,
+    });
+
+    Modal.close();
+    Toast.show(shortages.length > 0
+      ? `在庫が不足していました: ${shortages.join(" / ")}`
+      : "在庫を更新し、調理履歴に記録しました");
     this.openDetail(id);
   },
 
@@ -364,22 +441,46 @@ const Recipe = {
     if (field === "name") {
       this.editingMaterials[idx].name = value;
       const suggested = Utils.suggestUnit(value.trim());
-      if (suggested) {
+      if (suggested && suggested !== this.editingMaterials[idx].unit) {
         this.editingMaterials[idx].unit = suggested;
-        this.renderMaterialRows();
-        return;
+        this._syncMaterialRowUnitSelect(idx, suggested);
       }
-    } else if (field === "quantity") {
+      this._updateMaterialCostPlaceholder(idx);
+      return;
+    }
+    if (field === "quantity") {
       this.editingMaterials[idx].quantity = parseFloat(value);
-      this.renderMaterialRows();
+      this._updateMaterialCostPlaceholder(idx);
       return;
-    } else if (field === "unit") {
+    }
+    if (field === "unit") {
       this.editingMaterials[idx].unit = value;
-      this.renderMaterialRows();
+      this._updateMaterialCostPlaceholder(idx);
       return;
-    } else if (field === "manualCost") {
+    }
+    if (field === "manualCost") {
       this.editingMaterials[idx].manualCost = value === "" ? null : parseFloat(value);
     }
+  },
+
+  /** 材料費入力欄の「未入力時の自動計算プレースホルダー」だけを再計算して反映する（行全体は再描画しない） */
+  _updateMaterialCostPlaceholder(idx) {
+    const m = this.editingMaterials[idx];
+    const autoCost = Utils.calcMaterialCost(m.name, m.quantity, m.unit);
+    const rows = document.querySelectorAll("#rf-materials .material-row");
+    const row = rows[idx];
+    if (!row) return;
+    const costInput = row.querySelector(".row-cost");
+    if (costInput) costInput.placeholder = autoCost !== null ? Math.round(autoCost) : "-";
+  },
+
+  /** 材料名から単位が自動推定された際、単位<select>の選択状態だけを反映する（行全体は再描画しない） */
+  _syncMaterialRowUnitSelect(idx, unit) {
+    const rows = document.querySelectorAll("#rf-materials .material-row");
+    const row = rows[idx];
+    if (!row) return;
+    const select = row.querySelector(".row-unit");
+    if (select) select.value = unit;
   },
 
   saveForm(id) {

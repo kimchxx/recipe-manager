@@ -182,16 +182,16 @@ const Analysis = {
     const history = Storage.getCookedHistory();
     const el = document.getElementById("analysis-nutrition");
     if (history.length === 0) {
-      el.innerHTML = `<p class="empty-message">「作った」記録がまだありません。レシピ画面で「作った」ボタンを押すと集計されます。</p>`;
+      el.innerHTML = `<p class="empty-message">調理履歴がまだありません。レシピ画面で「通常作成」「材料変更して作成」を押すと集計されます。</p>`;
       return;
     }
 
     const totals = { kcal: 0, protein: 0, fat: 0, carb: 0 };
     let count = 0;
     history.forEach((h) => {
-      const recipe = Storage.getRecipeById(h.recipeId);
-      if (!recipe) return;
-      const n = Utils.calcRecipeNutrition(recipe.materials);
+      // 手動追加（材料情報なし）は栄養計算の対象外
+      if (!h.materials || h.materials.length === 0) return;
+      const n = Utils.calcRecipeNutrition(h.materials);
       totals.kcal += n.kcal;
       totals.protein += n.protein;
       totals.fat += n.fat;
@@ -200,7 +200,7 @@ const Analysis = {
     });
 
     if (count === 0) {
-      el.innerHTML = `<p class="empty-message">集計できるデータがありません。</p>`;
+      el.innerHTML = `<p class="empty-message">集計できるデータがありません（手動追加の記録には材料情報が無いため対象外です）。</p>`;
       return;
     }
 
@@ -211,7 +211,7 @@ const Analysis = {
         <div class="nutrition-item"><span class="nutrition-label">平均脂質</span><span>${Math.round((totals.fat / count) * 10) / 10}g</span></div>
         <div class="nutrition-item"><span class="nutrition-label">平均炭水化物</span><span>${Math.round((totals.carb / count) * 10) / 10}g</span></div>
       </div>
-      <p class="analysis-note">集計対象: ${count}回分の「作った」記録</p>
+      <p class="analysis-note">集計対象: ${count}回分の調理記録</p>
     `;
   },
 };

@@ -152,6 +152,7 @@ const GasSync = {
       store: row["店名"],
       type: kubun === "外食" ? "eatout" : (kubun === "その他" ? "other" : "self"),
       eatoutType: row["外食区分"] === "複数" ? "group" : "solo",
+      eatoutVenue: row["業態"] === "cafe" || row["業態"] === "カフェ" ? "cafe" : "restaurant",
       otherFoodType: row["その他区分"] === "ジュース" ? "drink" : "snack",
       name: row["食材"] || "",
       quantity: row["数量"] === "" || row["数量"] === undefined ? "" : Number(row["数量"]),
@@ -212,6 +213,7 @@ const GasSync = {
       name: row["料理名"] || "",
       recipeId: row["レシピID"] || null,
       mealCategory: row["食事区分"] || "",
+      eatoutVenue: row["業態"] === "cafe" || row["業態"] === "カフェ" ? "cafe" : null,
       servings: Number(row["人数"]) || 1,
       cost: Number(row["食費"]) || 0,
       kcal: Number(row["kcal"]) || 0,
@@ -271,6 +273,7 @@ const GasSync = {
       "日付": p.date, "店名": p.store,
       "区分": p.type === "eatout" ? "外食" : (p.type === "other" ? "その他" : "自炊"),
       "外食区分": p.type === "eatout" ? (p.eatoutType === "group" ? "複数" : "一人") : "",
+      "業態": p.type === "eatout" ? (p.eatoutVenue === "cafe" ? "cafe" : "restaurant") : "",
       "その他区分": p.type === "other" ? (p.otherFoodType === "drink" ? "ジュース" : "お菓子") : "",
       "食材": p.name || "", "数量": p.quantity === "" || p.quantity === undefined ? "" : p.quantity,
       "単位": p.unit || "", "金額": p.price, "メモ": p.memo || "",
@@ -308,6 +311,7 @@ const GasSync = {
   pushCookedHistory() {
     this._debouncedPush("cookedHistory", () => Storage.getCookedHistory().map((h) => ({
       "日付": h.date, "料理名": h.name || "", "レシピID": h.recipeId || "", "食事区分": h.mealCategory || "",
+      "業態": h.eatoutVenue === "cafe" ? "cafe" : "",
       "人数": h.servings || 1, "食費": h.cost || 0,
       "kcal": h.kcal || 0, "タンパク質": h.protein || 0, "脂質": h.fat || 0, "炭水化物": h.carb || 0,
       "使用食材": JSON.stringify(h.materials || []), "手動追加": h.isManual ? "TRUE" : "FALSE",

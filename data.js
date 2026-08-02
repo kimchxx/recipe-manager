@@ -58,7 +58,7 @@ const UNIT_BASE_GROUP = {
   枚: "count_枚",
   本: "count_本",
   束: "count_束",
-  合: "count_合",
+  合: "weight", // 米の標準的な換算(1合=150g)で重さ系として扱い、kg等と自動換算できるようにする
   少々: "no_quantity",
   適量: "no_quantity",
 };
@@ -76,7 +76,7 @@ const UNIT_TO_BASE_RATE = {
   枚: 1,
   本: 1,
   束: 1,
-  合: 1,
+  合: 150, // 米1合 ≒ 150g
   少々: 1,
   適量: 1,
 };

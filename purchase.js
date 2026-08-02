@@ -16,11 +16,13 @@ const Purchase = {
   // 区分: "self"(自炊) / "eatout"(外食) / "other"(その他＝お菓子・ジュース)
   type: "self",
   eatoutType: "solo", // "solo"(一人) / "group"(複数)
+  eatoutVenue: "restaurant", // "restaurant"(外食) / "cafe"(カフェ)。集計上はどちらも外食費扱い
   otherFoodType: "snack", // "snack"(お菓子) / "drink"(ジュース)
 
   render() {
     this.type = "self";
     this.eatoutType = "solo";
+    this.eatoutVenue = "restaurant";
     this.otherFoodType = "snack";
     this.rows = [{ name: "", quantity: 1, unit: "g", price: "" }];
     const container = document.getElementById("page-content");
@@ -132,10 +134,17 @@ const Purchase = {
     } else if (this.type === "eatout") {
       el.innerHTML = `
         <div class="form-group">
+          <label>業態</label>
+          <div class="type-toggle" id="pur-eatout-venue-toggle">
+            <button type="button" class="type-toggle-btn ${this.eatoutVenue === "restaurant" ? "active" : ""}" data-eatout-venue="restaurant" onclick="Purchase.setEatoutVenue('restaurant')">🍜 外食</button>
+            <button type="button" class="type-toggle-btn ${this.eatoutVenue === "cafe" ? "active" : ""}" data-eatout-venue="cafe" onclick="Purchase.setEatoutVenue('cafe')">☕ カフェ</button>
+          </div>
+        </div>
+        <div class="form-group">
           <label>区分</label>
           <div class="type-toggle" id="pur-eatout-type-toggle">
-            <button type="button" class="type-toggle-btn ${this.eatoutType === "solo" ? "active" : ""}" data-eatout-type="solo" onclick="Purchase.setEatoutType('solo')">🍜 外食（一人）</button>
-            <button type="button" class="type-toggle-btn ${this.eatoutType === "group" ? "active" : ""}" data-eatout-type="group" onclick="Purchase.setEatoutType('group')">🍻 外食（複数）</button>
+            <button type="button" class="type-toggle-btn ${this.eatoutType === "solo" ? "active" : ""}" data-eatout-type="solo" onclick="Purchase.setEatoutType('solo')">一人</button>
+            <button type="button" class="type-toggle-btn ${this.eatoutType === "group" ? "active" : ""}" data-eatout-type="group" onclick="Purchase.setEatoutType('group')">複数</button>
           </div>
         </div>
         <div class="form-group">
@@ -170,6 +179,13 @@ const Purchase = {
       `;
       this.updateTotal();
     }
+  },
+
+  setEatoutVenue(eatoutVenue) {
+    this.eatoutVenue = eatoutVenue;
+    document.querySelectorAll("#pur-eatout-venue-toggle .type-toggle-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.eatoutVenue === eatoutVenue);
+    });
   },
 
   setEatoutType(eatoutType) {
@@ -311,9 +327,16 @@ const Purchase = {
         return;
       }
       const nutrition = this._readNutritionInputs("pur-eatout");
-      const purchase = Storage.addPurchase({ date, store, type: "eatout", eatoutType: this.eatoutType, name: "", quantity: "", unit: "", price, memo });
-      this._addLinkedMealHistory(purchase, this.eatoutType === "group" ? "eatout_group" : "eatout_solo", store, nutrition);
-      Toast.show(this.eatoutType === "group" ? "外食（複数）を登録しました" : "外食（一人）を登録しました");
+      const isCafe = this.eatoutVenue === "cafe";
+      const purchase = Storage.addPurchase({
+        date, store, type: "eatout", eatoutType: this.eatoutType, eatoutVenue: this.eatoutVenue,
+        name: "", quantity: "", unit: "", price, memo,
+      });
+      const mealCategory = this.eatoutType === "group" ? "eatout_group" : "eatout_solo";
+      const mealName = isCafe ? `☕ ${store}` : store;
+      this._addLinkedMealHistory(purchase, mealCategory, mealName, nutrition, this.eatoutVenue);
+      const venueLabel = isCafe ? "カフェ" : "外食";
+      Toast.show(`${venueLabel}（${this.eatoutType === "group" ? "複数" : "一人"}）を登録しました`);
     } else {
       const price = Number(document.getElementById("pur-other-price").value);
       const memo = document.getElementById("pur-other-memo").value.trim();
@@ -335,12 +358,12 @@ const Purchase = {
    * 外食・その他（お菓子/ジュース）を登録した際、食事履歴にも自動で連携登録する。
    * 購入履歴とID（sourcePurchaseId）で紐付け、編集・削除時も同期させる。
    */
-  _addLinkedMealHistory(purchase, mealCategory, name, nutrition) {
+  _addLinkedMealHistory(purchase, mealCategory, name, nutrition, venue) {
     Storage.addCookedHistory({
       date: purchase.date, name, mealCategory, recipeId: null, servings: 1,
       cost: purchase.price, materials: [], isManual: true,
       kcal: nutrition.kcal, protein: nutrition.protein, fat: nutrition.fat, carb: nutrition.carb,
-      sourcePurchaseId: purchase.id,
+      sourcePurchaseId: purchase.id, eatoutVenue: venue || null,
     });
   },
 
@@ -388,7 +411,9 @@ const Purchase = {
       const lines = g.items.map((i) => {
         let label;
         if (i.type === "eatout") {
-          label = `${i.eatoutType === "group" ? "🍻 外食（複数）" : "🍜 外食（一人）"}${i.memo ? `（${Utils.esc(i.memo)}）` : ""}`;
+          const isCafe = i.eatoutVenue === "cafe";
+          const venueLabel = isCafe ? "☕ カフェ" : (i.eatoutType === "group" ? "🍻 外食" : "🍜 外食");
+          label = `${venueLabel}（${i.eatoutType === "group" ? "複数" : "一人"}）${i.memo ? `（${Utils.esc(i.memo)}）` : ""}`;
         } else if (i.type === "other") {
           label = `${i.otherFoodType === "drink" ? "🥤 ジュース" : "🍬 お菓子"}${i.memo ? `（${Utils.esc(i.memo)}）` : ""}`;
         } else {
@@ -434,10 +459,17 @@ const Purchase = {
           <div class="form-group"><label>店名</label><input type="text" id="edit-store" class="input" value="${Utils.esc(p.store)}"></div>
         </div>
         <div class="form-group">
+          <label>業態</label>
+          <select id="edit-eatout-venue" class="input">
+            <option value="restaurant" ${p.eatoutVenue !== "cafe" ? "selected" : ""}>外食</option>
+            <option value="cafe" ${p.eatoutVenue === "cafe" ? "selected" : ""}>カフェ</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>区分</label>
           <select id="edit-eatout-type" class="input">
-            <option value="solo" ${p.eatoutType !== "group" ? "selected" : ""}>外食（一人）</option>
-            <option value="group" ${p.eatoutType === "group" ? "selected" : ""}>外食（複数）</option>
+            <option value="solo" ${p.eatoutType !== "group" ? "selected" : ""}>一人</option>
+            <option value="group" ${p.eatoutType === "group" ? "selected" : ""}>複数</option>
           </select>
         </div>
         <div class="form-group"><label>金額</label><input type="number" id="edit-price" class="input" value="${p.price}"></div>
@@ -526,11 +558,12 @@ const Purchase = {
       const price = Number(document.getElementById("edit-price").value);
       const memo = document.getElementById("edit-memo").value.trim();
       const eatoutType = document.getElementById("edit-eatout-type").value;
+      const eatoutVenue = document.getElementById("edit-eatout-venue").value;
       if (!price || price <= 0) {
         alert("金額を入力してください。");
         return;
       }
-      updates = { date, store, price, memo, eatoutType };
+      updates = { date, store, price, memo, eatoutType, eatoutVenue };
       nutrition = {
         kcal: Number(document.getElementById("edit-kcal").value) || 0,
         protein: Number(document.getElementById("edit-protein").value) || 0,
@@ -575,8 +608,14 @@ const Purchase = {
         const mealCategory = p.type === "eatout"
           ? (updates.eatoutType === "group" ? "eatout_group" : "eatout_solo")
           : (updates.otherFoodType === "drink" ? "drink" : "snack");
-        const name = p.type === "eatout" ? store : (updates.otherFoodType === "drink" ? "ジュース" : "お菓子");
-        Storage.updateCookedHistory(linked.id, { date, name, mealCategory, cost: updates.price, ...nutrition });
+        const name = p.type === "eatout"
+          ? (updates.eatoutVenue === "cafe" ? `☕ ${store}` : store)
+          : (updates.otherFoodType === "drink" ? "ジュース" : "お菓子");
+        Storage.updateCookedHistory(linked.id, {
+          date, name, mealCategory, cost: updates.price,
+          eatoutVenue: p.type === "eatout" ? updates.eatoutVenue : undefined,
+          ...nutrition,
+        });
       }
     }
 

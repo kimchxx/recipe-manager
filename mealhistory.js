@@ -52,7 +52,10 @@ const MealHistory = {
   },
 
   cardHtml(h) {
-    const categoryLabel = MEAL_CATEGORY_LABELS[h.mealCategory] || (h.isManual ? "自炊（手動）" : "自炊（レシピ）");
+    let categoryLabel = MEAL_CATEGORY_LABELS[h.mealCategory] || (h.isManual ? "自炊（手動）" : "自炊（レシピ）");
+    if (h.eatoutVenue === "cafe" && (h.mealCategory === "eatout_solo" || h.mealCategory === "eatout_group")) {
+      categoryLabel = h.mealCategory === "eatout_group" ? "カフェ（複数）" : "カフェ（一人）";
+    }
     const n = Utils.getMealNutrition(h);
     const isLinked = !!h.sourcePurchaseId;
     return `

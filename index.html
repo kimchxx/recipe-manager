@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>おうちごはん手帖 | 食費・在庫・レシピ管理</title>
+<title>マネーノート | 家計簿・食費・レシピ管理</title>
 
 <!-- ホーム画面に追加した際、アプリらしく全画面表示されるための設定 -->
 <meta name="theme-color" content="#6E8C5C">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="おうちごはん手帖">
+<meta name="apple-mobile-web-app-title" content="マネーノート">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -24,7 +24,7 @@
   <div id="app">
     <header class="app-header">
       <span class="app-header-spacer"></span>
-      <span class="app-header-title">おうちごはん手帖</span>
+      <span class="app-header-title">マネーノート</span>
       <button class="app-header-settings" onclick="GasSync.openSettings()" title="スプレッドシート連携設定">⚙</button>
     </header>
 
@@ -36,16 +36,19 @@
       <button class="nav-item" data-page="home" onclick="App.navigate('home')">
         <span class="nav-icon">🏠</span><span class="nav-label">ホーム</span>
       </button>
-      <button class="nav-item" data-page="purchase" onclick="App.navigate('purchase')">
-        <span class="nav-icon">🛒</span><span class="nav-label">食費</span>
+      <button class="nav-item" data-page="monthlyreport" onclick="App.navigate('monthlyreport')">
+        <span class="nav-icon">💰</span><span class="nav-label">家計管理</span>
       </button>
-      <button class="nav-item" data-page="inventory" onclick="App.navigate('inventory')">
-        <span class="nav-icon">📦</span><span class="nav-label">在庫</span>
+      <button class="nav-item" data-page="analysis" onclick="App.navigate('analysis')">
+        <span class="nav-icon">🍽</span><span class="nav-label">食事管理</span>
+      </button>
+      <button class="nav-item" data-page="purchase" onclick="App.navigate('purchase')">
+        <span class="nav-icon">🛒</span><span class="nav-label">食費登録</span>
       </button>
       <button class="nav-item" data-page="recipe" onclick="App.navigate('recipe')">
         <span class="nav-icon">📖</span><span class="nav-label">レシピ</span>
       </button>
-      <button class="nav-item" data-page="analysis" onclick="App.navigate('analysis')">
+      <button class="nav-item" data-page="insights" onclick="App.navigate('insights')">
         <span class="nav-icon">📊</span><span class="nav-label">分析</span>
       </button>
     </nav>
@@ -67,7 +70,10 @@
   <script src="recipe.js"></script>
   <script src="shopping.js"></script>
   <script src="analysis.js"></script>
-  <script src="cookedhistory.js"></script>
+  <script src="mealhistory.js"></script>
+  <script src="expense.js"></script>
+  <script src="monthlyreport.js"></script>
+  <script src="insights.js"></script>
 
   <!-- アプリ本体 -->
   <script src="app.js"></script>

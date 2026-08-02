@@ -21,7 +21,14 @@ const STORAGE_KEYS = {
   shoppingList: "rm_shopping_list",
   cookedHistory: "rm_cooked_history",
   budgets: "rm_budgets",
+  // ---- お金管理機能（既存の食費予算 budgets とは別の独立した仕組み） ----
+  expenses: "rm_expenses",
+  expenseCategories: "rm_expense_categories",
+  incomes: "rm_incomes",
+  categoryBudgets: "rm_category_budgets",
+  nutritionTarget: "rm_nutrition_target",
   initialized: "rm_initialized",
+  migratedMoneynote: "rm_migrated_moneynote_v1",
 };
 
 const Storage = {
@@ -40,7 +47,66 @@ const Storage = {
     localStorage.setItem(STORAGE_KEYS.shoppingList, JSON.stringify(INITIAL_SHOPPING_LIST));
     localStorage.setItem(STORAGE_KEYS.cookedHistory, JSON.stringify(INITIAL_COOKED_HISTORY));
     localStorage.setItem(STORAGE_KEYS.budgets, JSON.stringify(INITIAL_BUDGETS));
+    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(INITIAL_EXPENSES));
+    localStorage.setItem(STORAGE_KEYS.expenseCategories, JSON.stringify(INITIAL_EXPENSE_CATEGORIES));
+    localStorage.setItem(STORAGE_KEYS.incomes, JSON.stringify(INITIAL_INCOMES));
+    localStorage.setItem(STORAGE_KEYS.categoryBudgets, JSON.stringify(INITIAL_CATEGORY_BUDGETS));
+    localStorage.setItem(STORAGE_KEYS.nutritionTarget, JSON.stringify(INITIAL_NUTRITION_TARGET));
     localStorage.setItem(STORAGE_KEYS.initialized, "true");
+    // 新規インストールは最初からマネーノート仕様のデータなので移行不要
+    localStorage.setItem(STORAGE_KEYS.migratedMoneynote, "true");
+  },
+
+  /**
+   * 「マネーノート」リニューアルに伴うデータ移行（既存ユーザー向け・初回のみ実行）。
+   * ・支出カテゴリ「ジム」→「サブスク」に統合
+   * ・支出カテゴリ「外食」→「食費」に統合（本来は購入履歴側で管理するため、
+   *   万一残っていた場合の救済措置）
+   * ・支出カテゴリ一覧に不足している新カテゴリ（保険・被服費・教育費・投資）を追加
+   * ・外食の購入履歴で区分未設定のもの → 「外食（一人）」として扱う
+   */
+  migrateToMoneynote() {
+    if (localStorage.getItem(STORAGE_KEYS.migratedMoneynote)) return;
+
+    // ---- 支出カテゴリ一覧の統合・補完 ----
+    const categories = this.getExpenseCategories();
+    const hasCategory = (name) => categories.some((c) => c.name === name);
+    const filtered = categories.filter((c) => c.name !== "ジム" && c.name !== "外食");
+    INITIAL_EXPENSE_CATEGORIES.forEach((c) => {
+      if (!filtered.some((x) => x.name === c.name)) filtered.push({ ...c });
+    });
+    this.setExpenseCategories(filtered);
+
+    // ---- 支出履歴：ジム→サブスク、外食→食費 に付け替え ----
+    const expenses = this.getExpenses().map((e) => {
+      if (e.category === "ジム") return { ...e, category: "サブスク" };
+      if (e.category === "外食") return { ...e, category: "食費", foodType: e.foodType || "お菓子" };
+      return e;
+    });
+    this.setExpenses(expenses);
+
+    // ---- カテゴリ別予算：ジム→サブスク、外食→食費（同月に両方あれば合算） ----
+    const budgets = this.getCategoryBudgets();
+    const mergedBudgets = [];
+    budgets.forEach((b) => {
+      const newCategory = b.category === "ジム" ? "サブスク" : (b.category === "外食" ? "食費" : b.category);
+      const existing = mergedBudgets.find((x) => x.yearMonth === b.yearMonth && x.category === newCategory);
+      if (existing) {
+        existing.budget += b.budget;
+      } else {
+        mergedBudgets.push({ ...b, category: newCategory });
+      }
+    });
+    this.setCategoryBudgets(mergedBudgets);
+
+    // ---- 購入履歴：外食で区分未設定のものは「一人」扱いにする ----
+    const purchases = this.getPurchases().map((p) => {
+      if (p.type === "eatout" && !p.eatoutType) return { ...p, eatoutType: "solo" };
+      return p;
+    });
+    this.setPurchases(purchases);
+
+    localStorage.setItem(STORAGE_KEYS.migratedMoneynote, "true");
   },
 
   _get(key) {
@@ -253,6 +319,124 @@ const Storage = {
       list[idx].budget = amount;
     }
     this.setBudgets(list);
+  },
+
+  // =========================================================
+  // お金管理機能（家計簿）
+  // ---------------------------------------------------------
+  // 既存の「食費管理（購入履歴）」「食費予算（budgets）」とは
+  // 完全に独立した仕組み。「食費」「外食」の実額は購入履歴から
+  // 都度計算するため、支出履歴（expenses）には保存しない。
+  // =========================================================
+
+  // ---------------- 支出履歴（食費・外食を除く手入力の支出） ----------------
+  getExpenses() { return this._get(STORAGE_KEYS.expenses); },
+  setExpenses(list) {
+    this._set(STORAGE_KEYS.expenses, list);
+    if (typeof GasSync !== "undefined") GasSync.pushExpenses();
+  },
+  addExpense(item) {
+    const list = this.getExpenses();
+    item.id = "EX" + Date.now() + Math.floor(Math.random() * 1000);
+    list.push(item);
+    this.setExpenses(list);
+    return item;
+  },
+  updateExpense(id, updates) {
+    const list = this.getExpenses();
+    const idx = list.findIndex((e) => e.id === id);
+    if (idx === -1) return null;
+    list[idx] = { ...list[idx], ...updates };
+    this.setExpenses(list);
+    return list[idx];
+  },
+  deleteExpense(id) {
+    this.setExpenses(this.getExpenses().filter((e) => e.id !== id));
+  },
+
+  // ---------------- 支出カテゴリ（固定費/変動費の種別マスター） ----------------
+  getExpenseCategories() { return this._get(STORAGE_KEYS.expenseCategories); },
+  setExpenseCategories(list) {
+    this._set(STORAGE_KEYS.expenseCategories, list);
+    if (typeof GasSync !== "undefined") GasSync.pushExpenseCategories();
+  },
+  /** カテゴリの種別（固定費/変動費）だけを更新する */
+  updateExpenseCategoryType(name, type) {
+    const list = this.getExpenseCategories();
+    const idx = list.findIndex((c) => c.name === name);
+    if (idx === -1) return;
+    list[idx].type = type;
+    this.setExpenseCategories(list);
+  },
+
+  // ---------------- 収入履歴 ----------------
+  getIncomes() { return this._get(STORAGE_KEYS.incomes); },
+  setIncomes(list) {
+    this._set(STORAGE_KEYS.incomes, list);
+    if (typeof GasSync !== "undefined") GasSync.pushIncomes();
+  },
+  addIncome(item) {
+    const list = this.getIncomes();
+    item.id = "IN" + Date.now() + Math.floor(Math.random() * 1000);
+    list.push(item);
+    this.setIncomes(list);
+    return item;
+  },
+  updateIncome(id, updates) {
+    const list = this.getIncomes();
+    const idx = list.findIndex((i) => i.id === id);
+    if (idx === -1) return null;
+    list[idx] = { ...list[idx], ...updates };
+    this.setIncomes(list);
+    return list[idx];
+  },
+  deleteIncome(id) {
+    this.setIncomes(this.getIncomes().filter((i) => i.id !== id));
+  },
+
+  // ---------------- カテゴリ別予算 ----------------
+  getCategoryBudgets() { return this._get(STORAGE_KEYS.categoryBudgets); },
+  setCategoryBudgets(list) {
+    this._set(STORAGE_KEYS.categoryBudgets, list);
+    if (typeof GasSync !== "undefined") GasSync.pushCategoryBudgets();
+  },
+  getCategoryBudget(yearMonth, category) {
+    return this.getCategoryBudgets().find((b) => b.yearMonth === yearMonth && b.category === category) || null;
+  },
+  setCategoryBudget(yearMonth, category, amount) {
+    const list = this.getCategoryBudgets();
+    const idx = list.findIndex((b) => b.yearMonth === yearMonth && b.category === category);
+    if (idx === -1) {
+      list.push({ yearMonth, category, budget: amount });
+    } else {
+      list[idx].budget = amount;
+    }
+    this.setCategoryBudgets(list);
+  },
+  deleteCategoryBudget(yearMonth, category) {
+    this.setCategoryBudgets(this.getCategoryBudgets().filter((b) => !(b.yearMonth === yearMonth && b.category === category)));
+  },
+  /**
+   * 指定年月にそのカテゴリの予算が明示的に設定されていない場合、
+   * 直近の過去月（yearMonth以前）で最後に設定された予算を自動的に引き継ぐ。
+   * 「未設定の場合は前月の設定がそのまま使われる」を実現するための読み取り専用の補完。
+   * 一度も設定されたことが無いカテゴリは null を返す。
+   */
+  getEffectiveCategoryBudget(yearMonth, category) {
+    const list = this.getCategoryBudgets()
+      .filter((b) => b.category === category && b.yearMonth <= yearMonth)
+      .sort((a, b) => (a.yearMonth < b.yearMonth ? 1 : -1));
+    return list[0] || null;
+  },
+
+  // ---------------- 1日の栄養目標 ----------------
+  getNutritionTarget() {
+    const raw = localStorage.getItem(STORAGE_KEYS.nutritionTarget);
+    return raw ? JSON.parse(raw) : { ...INITIAL_NUTRITION_TARGET };
+  },
+  setNutritionTarget(target) {
+    localStorage.setItem(STORAGE_KEYS.nutritionTarget, JSON.stringify(target));
+    if (typeof GasSync !== "undefined") GasSync.pushNutritionTarget();
   },
 };
 

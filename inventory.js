@@ -9,38 +9,134 @@
  */
 
 const Inventory = {
+  searchKeyword: "",
+
   render() {
-    const list = Storage.getInventory();
+    this.searchKeyword = "";
     const container = document.getElementById("page-content");
-
-    const cards = list.length
-      ? list.map((item) => this.cardHtml(item)).join("")
-      : `<p class="empty-message">在庫はまだ登録されていません。</p>`;
-
     container.innerHTML = `
       <div class="page-header">
         <h2>📦 在庫管理</h2>
         <button class="btn btn-primary btn-round" onclick="Inventory.openAddModal()">＋ 在庫を追加</button>
       </div>
-      <div class="card-list">${cards}</div>
+      <div class="search-bar">
+        <input type="text" id="inv-search" class="input" placeholder="🔍 食材名で検索"
+          oninput="Inventory.onSearch(this.value)">
+      </div>
+      <div class="card-list" id="inventory-list"></div>
     `;
+    this.renderList();
   },
 
-  cardHtml(item) {
+  onSearch(value) {
+    this.searchKeyword = value;
+    this.renderList();
+  },
+
+  renderList() {
+    let list = Storage.getInventory();
+    const kw = this.searchKeyword.trim().toLowerCase();
+    if (kw) list = list.filter((i) => i.name.toLowerCase().includes(kw));
+
+    // 同じ食材名が2件以上ある場合は「重複」として検出する
+    const nameCounts = {};
+    list.forEach((i) => { nameCounts[i.name] = (nameCounts[i.name] || 0) + 1; });
+
+    const duplicates = list
+      .filter((i) => nameCounts[i.name] >= 2)
+      .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+    const singles = list.filter((i) => nameCounts[i.name] < 2);
+
+    // 重複しているものを一番上にまとめて表示する
+    const sorted = [...duplicates, ...singles];
+
+    const container = document.getElementById("inventory-list");
+    if (sorted.length === 0) {
+      container.innerHTML = `<p class="empty-message">${this.searchKeyword ? "該当する在庫が見つかりませんでした。" : "在庫はまだ登録されていません。"}</p>`;
+      return;
+    }
+    container.innerHTML = sorted.map((item) => this.cardHtml(item, nameCounts[item.name] >= 2)).join("");
+  },
+
+  cardHtml(item, isDuplicate) {
     const statusClass = item.status === "未開封" ? "status-unopened" : "status-opened";
     return `
-      <div class="card inventory-card">
+      <div class="card inventory-card ${isDuplicate ? "inventory-card-duplicate" : ""}">
         <div class="card-main">
-          <div class="card-title">${Utils.esc(item.name)}</div>
+          <div class="card-title">${Utils.esc(item.name)}${isDuplicate ? ` <span class="duplicate-badge">重複</span>` : ""}</div>
           <div class="card-sub">${Utils.formatQuantity(item.quantity, item.unit)}</div>
           <span class="badge ${statusClass}">${item.status}</span>
         </div>
         <div class="card-actions">
+          ${isDuplicate ? `<button class="btn btn-sm btn-primary" onclick="Inventory.mergeDuplicates('${item.id}')">🔗 合算</button>` : ""}
           <button class="btn btn-sm btn-outline" onclick="Inventory.openEditModal('${item.id}')">編集</button>
           <button class="btn btn-sm btn-danger-outline" onclick="Inventory.confirmDelete('${item.id}')">削除</button>
         </div>
       </div>
     `;
+  },
+
+  /**
+   * 同じ食材名の在庫を1件にまとめる。
+   * ・g⇔kg、ml⇔Lなど換算可能な単位同士はベース単位（g/ml）に揃えて合算する
+   * ・個・匹・枚・本・合など、単位が一致するものはそのまま合算する
+   * ・単位が異なり換算もできない組み合わせ（例: 個 と g）は合算せずそれぞれ残す
+   * ・状態は、合算対象のどれか1つでも「開封済み」なら「開封済み」にする
+   */
+  mergeDuplicates(itemId) {
+    const target = Storage.getInventory().find((i) => i.id === itemId);
+    if (!target) return;
+    const name = target.name;
+
+    const allItems = Storage.getInventory();
+    const sameNameItems = allItems.filter((i) => i.name === name);
+    if (sameNameItems.length < 2) return;
+
+    const groups = {}; // 単位グループ(weight/volume/count_個 等) -> 合算対象
+    const untouched = []; // no_quantity(少々・適量)など合算対象外
+
+    sameNameItems.forEach((item) => {
+      const group = UNIT_BASE_GROUP[item.unit];
+      if (!group || group === "no_quantity") {
+        untouched.push(item);
+        return;
+      }
+      if (!groups[group]) groups[group] = { totalBase: 0, anyOpened: false, items: [] };
+      const rate = UNIT_TO_BASE_RATE[item.unit] ?? 1;
+      groups[group].totalBase += item.quantity * rate;
+      if (item.status === "開封済み") groups[group].anyOpened = true;
+      groups[group].items.push(item);
+    });
+
+    const rest = allItems.filter((i) => i.name !== name);
+    const merged = [];
+    let mergedCount = 0;
+
+    Object.keys(groups).forEach((group) => {
+      const g = groups[group];
+      if (g.items.length < 2) {
+        merged.push(...g.items); // このグループ内では重複していないのでそのまま
+        return;
+      }
+      const baseUnit = group === "weight" ? "g" : group === "volume" ? "ml" : g.items[0].unit;
+      merged.push({
+        id: g.items[0].id,
+        name,
+        quantity: round2(g.totalBase),
+        unit: baseUnit,
+        status: g.anyOpened ? "開封済み" : "未開封",
+      });
+      mergedCount += g.items.length;
+    });
+
+    Storage.setInventory([...rest, ...merged, ...untouched]);
+
+    if (mergedCount > 0) {
+      Toast.show(`「${name}」を1件にまとめました`);
+    } else {
+      Toast.show("単位の異なる在庫は自動で合算できませんでした。編集画面から単位を揃えてください。");
+    }
+    this.renderList();
   },
 
   openAddModal() {
@@ -90,7 +186,7 @@ const Inventory = {
     }
     Storage.addInventoryItem({ name, quantity, unit, status });
     Modal.close();
-    Inventory.render();
+    Inventory.renderList();
   },
 
   openEditModal(id) {
@@ -136,13 +232,13 @@ const Inventory = {
     }
     Storage.updateInventoryItem(id, { name, quantity, unit, status });
     Modal.close();
-    Inventory.render();
+    Inventory.renderList();
   },
 
   confirmDelete(id) {
     if (confirm("この在庫を削除しますか？")) {
       Storage.deleteInventoryItem(id);
-      Inventory.render();
+      Inventory.renderList();
     }
   },
 

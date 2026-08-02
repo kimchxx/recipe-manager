@@ -1,7 +1,7 @@
 {
-  "name": "おうちごはん手帖",
-  "short_name": "おうちごはん手帖",
-  "description": "食費・在庫・レシピ管理アプリ",
+  "name": "マネーノート",
+  "short_name": "マネーノート",
+  "description": "家計簿・食費・レシピ管理アプリ",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#F8F3EA",

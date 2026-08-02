@@ -105,6 +105,14 @@ const GasSync = {
     Storage.setCookedHistory((d.cookedHistory || []).map(this._mapCookedFromSheet));
     Storage.setBudgets((d.settings || []).map(this._mapBudgetFromSheet).filter((b) => b.yearMonth));
 
+    Storage.setExpenses((d.expenses || []).map(this._mapExpenseFromSheet));
+    Storage.setExpenseCategories((d.expenseCategories || []).map(this._mapExpenseCategoryFromSheet).filter((c) => c.name));
+    Storage.setIncomes((d.incomes || []).map(this._mapIncomeFromSheet));
+    Storage.setCategoryBudgets((d.categoryBudgets || []).map(this._mapCategoryBudgetFromSheet).filter((b) => b.yearMonth && b.category));
+    if (d.nutritionTarget && d.nutritionTarget.length > 0) {
+      Storage.setNutritionTarget(this._mapNutritionTargetFromSheet(d.nutritionTarget[0]));
+    }
+
     App.renderIngredientDatalist();
     return true;
   },
@@ -137,11 +145,14 @@ const GasSync = {
     return { unit: row["単位"], toUnit: row["変換先"], rate: Number(row["換算値"]) || 1 };
   },
   _mapPurchaseFromSheet(row) {
+    const kubun = row["区分"];
     return {
       id: Utils.uid("P"),
       date: GasSync._toDateStr(row["日付"]),
       store: row["店名"],
-      type: row["区分"] === "外食" ? "eatout" : "self",
+      type: kubun === "外食" ? "eatout" : (kubun === "その他" ? "other" : "self"),
+      eatoutType: row["外食区分"] === "複数" ? "group" : "solo",
+      otherFoodType: row["その他区分"] === "ジュース" ? "drink" : "snack",
       name: row["食材"] || "",
       quantity: row["数量"] === "" || row["数量"] === undefined ? "" : Number(row["数量"]),
       unit: row["単位"] || "",
@@ -171,6 +182,7 @@ const GasSync = {
       id,
       name: row["料理名"],
       genre: row["ジャンル"] || "その他",
+      courseTypes: row["分類"] ? String(row["分類"]).split(",").map((s) => s.trim()).filter(Boolean) : [],
       cookTime: Number(row["調理時間"]) || 0,
       servings: Number(row["人数"]) || 1,
       rating: Number(row["評価"]) || 0,
@@ -199,14 +211,55 @@ const GasSync = {
       date: GasSync._toDateStr(row["日付"]),
       name: row["料理名"] || "",
       recipeId: row["レシピID"] || null,
+      mealCategory: row["食事区分"] || "",
       servings: Number(row["人数"]) || 1,
       cost: Number(row["食費"]) || 0,
+      kcal: Number(row["kcal"]) || 0,
+      protein: Number(row["タンパク質"]) || 0,
+      fat: Number(row["脂質"]) || 0,
+      carb: Number(row["炭水化物"]) || 0,
       materials,
       isManual: manual === true || manual === "TRUE",
+      sourcePurchaseId: row["連携購入ID"] || null,
     };
   },
   _mapBudgetFromSheet(row) {
     return { yearMonth: row["対象年月"], budget: Number(row["食費予算"]) || 0 };
+  },
+  _mapNutritionTargetFromSheet(row) {
+    return {
+      kcal: Number(row["kcal"]) || 2000,
+      protein: Number(row["タンパク質"]) || 60,
+      fat: Number(row["脂質"]) || 60,
+      carb: Number(row["炭水化物"]) || 250,
+    };
+  },
+
+  _mapExpenseFromSheet(row) {
+    return {
+      id: Utils.uid("EX"),
+      date: GasSync._toDateStr(row["日付"]),
+      category: row["カテゴリ"] || "その他",
+      foodType: row["食費区分"] || "",
+      amount: Number(row["金額"]) || 0,
+      place: row["利用先"] || "",
+      memo: row["メモ"] || "",
+    };
+  },
+  _mapExpenseCategoryFromSheet(row) {
+    return { name: row["カテゴリ名"], type: row["種別"] === "固定費" ? "固定費" : "変動費" };
+  },
+  _mapIncomeFromSheet(row) {
+    return {
+      id: Utils.uid("IN"),
+      date: GasSync._toDateStr(row["日付"]),
+      amount: Number(row["金額"]) || 0,
+      source: row["収入源"] || "",
+      memo: row["メモ"] || "",
+    };
+  },
+  _mapCategoryBudgetFromSheet(row) {
+    return { yearMonth: row["対象年月"], category: row["カテゴリ"], budget: Number(row["予算"]) || 0 };
   },
 
   // ------------------------------------------------------
@@ -215,7 +268,10 @@ const GasSync = {
   // ------------------------------------------------------
   pushPurchases() {
     this._debouncedPush("purchases", () => Storage.getPurchases().map((p) => ({
-      "日付": p.date, "店名": p.store, "区分": p.type === "eatout" ? "外食" : "自炊",
+      "日付": p.date, "店名": p.store,
+      "区分": p.type === "eatout" ? "外食" : (p.type === "other" ? "その他" : "自炊"),
+      "外食区分": p.type === "eatout" ? (p.eatoutType === "group" ? "複数" : "一人") : "",
+      "その他区分": p.type === "other" ? (p.otherFoodType === "drink" ? "ジュース" : "お菓子") : "",
       "食材": p.name || "", "数量": p.quantity === "" || p.quantity === undefined ? "" : p.quantity,
       "単位": p.unit || "", "金額": p.price, "メモ": p.memo || "",
     })));
@@ -227,7 +283,7 @@ const GasSync = {
   },
   pushRecipes() {
     this._debouncedPush("recipes", () => Storage.getRecipes().map((r) => ({
-      "レシピID": r.id, "料理名": r.name, "ジャンル": r.genre, "調理時間": r.cookTime, "人数": r.servings,
+      "レシピID": r.id, "料理名": r.name, "ジャンル": r.genre, "分類": (r.courseTypes || []).join(","), "調理時間": r.cookTime, "人数": r.servings,
       "評価": r.rating, "材料費": Utils.calcRecipeTotalCost(r.materials) ?? "",
       "お気に入り": r.favorite ? "TRUE" : "FALSE",
       "献立候補": r.mealPlan ? "TRUE" : "FALSE", "献立候補追加日時": r.mealPlanAddedAt || "",
@@ -251,34 +307,87 @@ const GasSync = {
   },
   pushCookedHistory() {
     this._debouncedPush("cookedHistory", () => Storage.getCookedHistory().map((h) => ({
-      "日付": h.date, "料理名": h.name || "", "レシピID": h.recipeId || "",
+      "日付": h.date, "料理名": h.name || "", "レシピID": h.recipeId || "", "食事区分": h.mealCategory || "",
       "人数": h.servings || 1, "食費": h.cost || 0,
+      "kcal": h.kcal || 0, "タンパク質": h.protein || 0, "脂質": h.fat || 0, "炭水化物": h.carb || 0,
       "使用食材": JSON.stringify(h.materials || []), "手動追加": h.isManual ? "TRUE" : "FALSE",
+      "連携購入ID": h.sourcePurchaseId || "",
     })));
+  },
+  pushNutritionTarget() {
+    this._debouncedPush("nutritionTarget", () => {
+      const t = Storage.getNutritionTarget();
+      return [{ "kcal": t.kcal, "タンパク質": t.protein, "脂質": t.fat, "炭水化物": t.carb }];
+    });
   },
   pushBudgets() {
     this._debouncedPush("settings", () => Storage.getBudgets().map((b) => ({
       "対象年月": b.yearMonth, "食費予算": b.budget,
     })));
   },
+  pushExpenses() {
+    this._debouncedPush("expenses", () => Storage.getExpenses().map((e) => ({
+      "日付": e.date, "カテゴリ": e.category, "食費区分": e.foodType || "", "金額": e.amount, "利用先": e.place || "", "メモ": e.memo || "",
+    })));
+  },
+  pushExpenseCategories() {
+    this._debouncedPush("expenseCategories", () => Storage.getExpenseCategories().map((c) => ({
+      "カテゴリ名": c.name, "種別": c.type,
+    })));
+  },
+  pushIncomes() {
+    this._debouncedPush("incomes", () => Storage.getIncomes().map((i) => ({
+      "日付": i.date, "金額": i.amount, "収入源": i.source || "", "メモ": i.memo || "",
+    })));
+  },
+  pushCategoryBudgets() {
+    this._debouncedPush("categoryBudgets", () => Storage.getCategoryBudgets().map((b) => ({
+      "対象年月": b.yearMonth, "カテゴリ": b.category, "予算": b.budget,
+    })));
+  },
 
   _debouncedPush(sheetKey, getRowsFn) {
     if (!this.isConfigured()) return;
     clearTimeout(this._pushTimers[sheetKey]);
-    this._pushTimers[sheetKey] = setTimeout(async () => {
-      try {
-        const res = await fetch(this.getUrl(), {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" }, // preflight回避のためtext/plainで送信しGAS側でJSON.parseする
-          body: JSON.stringify({ action: "replaceSheet", sheet: sheetKey, rows: getRowsFn(), key: this.getKey() }),
-        });
-        const json = await res.json();
-        if (!json.ok) throw new Error(json.error === "unauthorized" ? "アクセスキーが正しくありません" : (json.error || "同期に失敗しました"));
-      } catch (err) {
-        console.error("GAS sync error:", err);
-        Toast.show("スプレッドシートへの同期に失敗しました（" + err.message + "）");
-      }
+    this._pushTimers[sheetKey] = setTimeout(() => {
+      this._runPush(sheetKey, getRowsFn);
     }, 600);
+  },
+
+  /**
+   * 実際の送信を行う。同じシートへの送信が同時に走らないようにし、
+   * 実行中に新しい変更が入った場合は、完了後にもう一度（最新データで）送り直す。
+   * これにより「後から送ったはずが先に完了し、古いデータで上書きされる」という
+   * 競合状態を防いでいる。
+   */
+  async _runPush(sheetKey, getRowsFn) {
+    if (this._inFlight && this._inFlight[sheetKey]) {
+      // 送信中に次の変更が来た場合は、完了後に最新データで送り直す予約だけしておく
+      this._pendingPush = this._pendingPush || {};
+      this._pendingPush[sheetKey] = getRowsFn;
+      return;
+    }
+    this._inFlight = this._inFlight || {};
+    this._inFlight[sheetKey] = true;
+    try {
+      const res = await fetch(this.getUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // preflight回避のためtext/plainで送信しGAS側でJSON.parseする
+        body: JSON.stringify({ action: "replaceSheet", sheet: sheetKey, rows: getRowsFn(), key: this.getKey() }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error === "unauthorized" ? "アクセスキーが正しくありません" : (json.error || "同期に失敗しました"));
+    } catch (err) {
+      console.error("GAS sync error:", err);
+      Toast.show("スプレッドシートへの同期に失敗しました（" + err.message + "）");
+    } finally {
+      this._inFlight[sheetKey] = false;
+      if (this._pendingPush && this._pendingPush[sheetKey]) {
+        const pendingFn = this._pendingPush[sheetKey];
+        delete this._pendingPush[sheetKey];
+        this._runPush(sheetKey, pendingFn);
+      }
+    }
   },
 
   async backupNow() {

@@ -19,11 +19,15 @@ const App = {
     recipe: Recipe,
     analysis: Analysis,
     shopping: Shopping,
-    cookedhistory: CookedHistory,
+    cookedhistory: MealHistory,
+    expense: Expense,
+    monthlyreport: MonthlyReport,
+    insights: Insights,
   },
 
   async init() {
     Storage.initializeData();
+    Storage.migrateToMoneynote();
     this.renderIngredientDatalist();
 
     if (typeof GasSync !== "undefined" && GasSync.isConfigured()) {

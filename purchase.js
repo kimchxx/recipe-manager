@@ -1,34 +1,42 @@
 /**
  * purchase.js
  * ---------------------------------------------------------
- * 食費管理（購入登録・購入履歴）画面のロジック。
- * ・日付/店名 + 複数食材をまとめて登録（自炊）
- * ・日付/店名 + 金額のみで登録（外食）
- * ・登録時に購入履歴保存 + （自炊のみ）在庫追加 + 合計金額計算
+ * 🍽 食費登録画面のロジック（旧: 購入登録）。
+ * ・区分は3種類：自炊 / 外食 / その他（お菓子・ジュース）
+ * ・自炊：食材を複数行まとめて登録し、在庫にも反映
+ * ・外食・その他：金額＋栄養情報（任意）を登録
+ * ・外食・その他は「食事履歴」にも自動で連携登録される
+ *   （在庫やレシピには影響しない。栄養管理を食事履歴に一元化するため）
  * ---------------------------------------------------------
  */
 
 const Purchase = {
-  // 入力中の食材行（一時データ）
+  // 入力中の食材行（一時データ、自炊のとき使用）
   rows: [],
-  // 区分: "self"(自炊/食材購入) / "eatout"(外食)
+  // 区分: "self"(自炊) / "eatout"(外食) / "other"(その他＝お菓子・ジュース)
   type: "self",
+  eatoutType: "solo", // "solo"(一人) / "group"(複数)
+  otherFoodType: "snack", // "snack"(お菓子) / "drink"(ジュース)
 
   render() {
     this.type = "self";
+    this.eatoutType = "solo";
+    this.otherFoodType = "snack";
     this.rows = [{ name: "", quantity: 1, unit: "g", price: "" }];
     const container = document.getElementById("page-content");
     container.innerHTML = `
       <div class="page-header">
-        <h2>🛒 食費管理</h2>
+        <h2>🍽 食費登録</h2>
+        <button class="btn btn-outline btn-round" onclick="App.navigate('inventory')">📦 在庫管理</button>
       </div>
 
       <div class="card form-card">
-        <h3 class="section-title">購入登録</h3>
+        <h3 class="section-title">食費登録</h3>
 
         <div class="type-toggle" id="pur-type-toggle">
-          <button type="button" class="type-toggle-btn active" data-type="self" onclick="Purchase.setType('self')">🍳 自炊（食材購入）</button>
+          <button type="button" class="type-toggle-btn active" data-type="self" onclick="Purchase.setType('self')">🍳 自炊</button>
           <button type="button" class="type-toggle-btn" data-type="eatout" onclick="Purchase.setType('eatout')">🍽 外食</button>
+          <button type="button" class="type-toggle-btn" data-type="other" onclick="Purchase.setType('other')">🍬 その他</button>
         </div>
 
         <div class="form-row">
@@ -52,10 +60,10 @@ const Purchase = {
           合計金額: <span id="pur-total">0円</span>
         </div>
 
-        <button class="btn btn-primary btn-block btn-lg" onclick="Purchase.submit()">購入登録</button>
+        <button class="btn btn-primary btn-block btn-lg" onclick="Purchase.submit()">登録する</button>
       </div>
 
-      <h3 class="section-title">購入履歴</h3>
+      <h3 class="section-title">食費登録履歴</h3>
       <div class="card-list" id="pur-history"></div>
     `;
     this.renderDynamicArea();
@@ -64,7 +72,7 @@ const Purchase = {
 
   // ------------------------------------------------------
   // 税込価格への変換（レシートの税抜表示金額から税込金額を計算する用途）
-  // 自炊（食材購入）のときのみボタンを表示する
+  // 自炊のときのみボタンを表示する
   // ------------------------------------------------------
   convertToTaxIncluded() {
     const TAX_RATE = 0.08; // 食品の軽減税率を想定
@@ -76,7 +84,6 @@ const Purchase = {
         convertedCount++;
       }
     });
-    // フォーカスを奪わないよう、行全体は再描画せず金額欄の表示だけを直接更新する
     const priceInputs = document.querySelectorAll("#pur-rows .row-price");
     this.rows.forEach((r, idx) => {
       if (priceInputs[idx]) priceInputs[idx].value = r.price === "" ? "" : r.price;
@@ -86,7 +93,7 @@ const Purchase = {
   },
 
   // ------------------------------------------------------
-  // 区分切り替え（自炊 / 外食）
+  // 区分切り替え（自炊 / 外食 / その他）
   // ------------------------------------------------------
   setType(type) {
     this.type = type;
@@ -98,6 +105,22 @@ const Purchase = {
     this.renderDynamicArea();
   },
 
+  /** 栄養情報の入力欄（外食・その他で共通利用） */
+  _nutritionFieldsHtml(prefix) {
+    return `
+      <div class="form-group">
+        <label>栄養情報（任意・分かる範囲でOK）</label>
+        <div class="nutrition-input-grid">
+          <input type="number" id="${prefix}-kcal" class="input" placeholder="kcal">
+          <input type="number" id="${prefix}-protein" class="input" placeholder="タンパク質(g)">
+          <input type="number" id="${prefix}-fat" class="input" placeholder="脂質(g)">
+          <input type="number" id="${prefix}-carb" class="input" placeholder="炭水化物(g)">
+        </div>
+        <p class="settings-note">入力すると「🍽食事管理」の栄養目標グラフに反映されます。未入力の場合は0として扱われます。</p>
+      </div>
+    `;
+  },
+
   renderDynamicArea() {
     const el = document.getElementById("pur-dynamic-area");
     if (this.type === "self") {
@@ -106,19 +129,61 @@ const Purchase = {
         <button class="btn btn-outline btn-block" onclick="Purchase.addRow()">＋ 食材を追加</button>
       `;
       this.renderRows();
-    } else {
+    } else if (this.type === "eatout") {
       el.innerHTML = `
+        <div class="form-group">
+          <label>区分</label>
+          <div class="type-toggle" id="pur-eatout-type-toggle">
+            <button type="button" class="type-toggle-btn ${this.eatoutType === "solo" ? "active" : ""}" data-eatout-type="solo" onclick="Purchase.setEatoutType('solo')">🍜 外食（一人）</button>
+            <button type="button" class="type-toggle-btn ${this.eatoutType === "group" ? "active" : ""}" data-eatout-type="group" onclick="Purchase.setEatoutType('group')">🍻 外食（複数）</button>
+          </div>
+        </div>
         <div class="form-group">
           <label>金額</label>
           <input type="number" id="pur-eatout-price" class="input" placeholder="例: 1200" oninput="Purchase.updateTotal()">
         </div>
         <div class="form-group">
           <label>メモ（任意）</label>
-          <input type="text" id="pur-eatout-memo" class="input" placeholder="例: ランチ・同僚と">
+          <input type="text" id="pur-eatout-memo" class="input" placeholder="例: ランチ・同僚と（複数なら支払った合計金額を入力）">
         </div>
+        ${this._nutritionFieldsHtml("pur-eatout")}
+      `;
+      this.updateTotal();
+    } else {
+      el.innerHTML = `
+        <div class="form-group">
+          <label>区分</label>
+          <div class="type-toggle" id="pur-other-type-toggle">
+            <button type="button" class="type-toggle-btn ${this.otherFoodType === "snack" ? "active" : ""}" data-other-type="snack" onclick="Purchase.setOtherFoodType('snack')">🍬 お菓子</button>
+            <button type="button" class="type-toggle-btn ${this.otherFoodType === "drink" ? "active" : ""}" data-other-type="drink" onclick="Purchase.setOtherFoodType('drink')">🥤 ジュース</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>金額</label>
+          <input type="number" id="pur-other-price" class="input" placeholder="例: 300" oninput="Purchase.updateTotal()">
+        </div>
+        <div class="form-group">
+          <label>メモ（任意）</label>
+          <input type="text" id="pur-other-memo" class="input">
+        </div>
+        ${this._nutritionFieldsHtml("pur-other")}
       `;
       this.updateTotal();
     }
+  },
+
+  setEatoutType(eatoutType) {
+    this.eatoutType = eatoutType;
+    document.querySelectorAll("#pur-eatout-type-toggle .type-toggle-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.eatoutType === eatoutType);
+    });
+  },
+
+  setOtherFoodType(otherFoodType) {
+    this.otherFoodType = otherFoodType;
+    document.querySelectorAll("#pur-other-type-toggle .type-toggle-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.otherType === otherFoodType);
+    });
   },
 
   // ------------------------------------------------------
@@ -185,18 +250,31 @@ const Purchase = {
   },
 
   // ------------------------------------------------------
-  // 合計金額表示（自炊/外食共通）
+  // 合計金額表示
   // ------------------------------------------------------
   updateTotal() {
     let total = 0;
     if (this.type === "self") {
       total = this.rows.reduce((sum, r) => sum + (isNaN(r.price) ? 0 : Number(r.price) || 0), 0);
-    } else {
+    } else if (this.type === "eatout") {
       const priceEl = document.getElementById("pur-eatout-price");
+      total = priceEl ? (Number(priceEl.value) || 0) : 0;
+    } else {
+      const priceEl = document.getElementById("pur-other-price");
       total = priceEl ? (Number(priceEl.value) || 0) : 0;
     }
     const el = document.getElementById("pur-total");
     if (el) el.textContent = Utils.formatYen(total);
+  },
+
+  /** 栄養入力欄から値を読み取る（未入力は0扱い） */
+  _readNutritionInputs(prefix) {
+    return {
+      kcal: Number(document.getElementById(`${prefix}-kcal`).value) || 0,
+      protein: Number(document.getElementById(`${prefix}-protein`).value) || 0,
+      fat: Number(document.getElementById(`${prefix}-fat`).value) || 0,
+      carb: Number(document.getElementById(`${prefix}-carb`).value) || 0,
+    };
   },
 
   // ------------------------------------------------------
@@ -222,49 +300,77 @@ const Purchase = {
           date, store, type: "self", name: row.name.trim(), quantity: Number(row.quantity), unit: row.unit, price,
         });
         Storage.addOrUpdateInventoryOnPurchase(row.name.trim(), Number(row.quantity), row.unit);
-        // 購入によって不足解消した食材は買い物リストから削除
         Storage.removeShoppingItemByName(row.name.trim());
       });
-      Toast.show("購入を登録しました");
-    } else {
+      Toast.show("自炊の食費を登録しました");
+    } else if (this.type === "eatout") {
       const price = Number(document.getElementById("pur-eatout-price").value);
       const memo = document.getElementById("pur-eatout-memo").value.trim();
       if (!price || price <= 0) {
         alert("金額を入力してください。");
         return;
       }
-      // 外食は在庫・レシピに影響を与えず、食費・分析のみ対象とする
-      Storage.addPurchase({ date, store, type: "eatout", name: "", quantity: "", unit: "", price, memo });
-      Toast.show("外食を登録しました");
+      const nutrition = this._readNutritionInputs("pur-eatout");
+      const purchase = Storage.addPurchase({ date, store, type: "eatout", eatoutType: this.eatoutType, name: "", quantity: "", unit: "", price, memo });
+      this._addLinkedMealHistory(purchase, this.eatoutType === "group" ? "eatout_group" : "eatout_solo", store, nutrition);
+      Toast.show(this.eatoutType === "group" ? "外食（複数）を登録しました" : "外食（一人）を登録しました");
+    } else {
+      const price = Number(document.getElementById("pur-other-price").value);
+      const memo = document.getElementById("pur-other-memo").value.trim();
+      if (!price || price <= 0) {
+        alert("金額を入力してください。");
+        return;
+      }
+      const nutrition = this._readNutritionInputs("pur-other");
+      const label = this.otherFoodType === "drink" ? "ジュース" : "お菓子";
+      const purchase = Storage.addPurchase({ date, store, type: "other", otherFoodType: this.otherFoodType, name: "", quantity: "", unit: "", price, memo });
+      this._addLinkedMealHistory(purchase, this.otherFoodType === "drink" ? "drink" : "snack", label, nutrition);
+      Toast.show(`${label}を登録しました`);
     }
 
-    // 食材行・金額などの入力内容はリセットするが、日付・店名・区分は直前の入力を引き継ぐ
-    // （同じ日・同じ店でまとめて何回かに分けて登録したい場合に、毎回入力し直さずに済むようにするため）
     this.resetFormKeepingDateStore(date, store);
+  },
+
+  /**
+   * 外食・その他（お菓子/ジュース）を登録した際、食事履歴にも自動で連携登録する。
+   * 購入履歴とID（sourcePurchaseId）で紐付け、編集・削除時も同期させる。
+   */
+  _addLinkedMealHistory(purchase, mealCategory, name, nutrition) {
+    Storage.addCookedHistory({
+      date: purchase.date, name, mealCategory, recipeId: null, servings: 1,
+      cost: purchase.price, materials: [], isManual: true,
+      kcal: nutrition.kcal, protein: nutrition.protein, fat: nutrition.fat, carb: nutrition.carb,
+      sourcePurchaseId: purchase.id,
+    });
   },
 
   resetFormKeepingDateStore(date, store) {
     const keepType = this.type;
+    const keepEatoutType = this.eatoutType;
+    const keepOtherType = this.otherFoodType;
     this.render();
     document.getElementById("pur-date").value = date;
     document.getElementById("pur-store").value = store;
     if (keepType === "eatout") {
       this.setType("eatout");
+      this.setEatoutType(keepEatoutType);
+    } else if (keepType === "other") {
+      this.setType("other");
+      this.setOtherFoodType(keepOtherType);
     }
   },
 
   // ------------------------------------------------------
-  // 購入履歴表示
+  // 食費登録履歴表示
   // ------------------------------------------------------
   renderHistory() {
     const list = Storage.getPurchases().slice().sort((a, b) => (a.date < b.date ? 1 : -1));
     const container = document.getElementById("pur-history");
     if (list.length === 0) {
-      container.innerHTML = `<p class="empty-message">購入履歴はまだありません。</p>`;
+      container.innerHTML = `<p class="empty-message">食費登録履歴はまだありません。</p>`;
       return;
     }
 
-    // 日付+店名でグルーピングして表示
     const groups = {};
     list.forEach((p) => {
       const key = `${p.date}__${p.store}`;
@@ -275,9 +381,14 @@ const Purchase = {
     container.innerHTML = Object.values(groups).map((g) => {
       const total = g.items.reduce((sum, i) => sum + (i.price || 0), 0);
       const lines = g.items.map((i) => {
-        const label = i.type === "eatout"
-          ? `🍽 外食${i.memo ? `（${Utils.esc(i.memo)}）` : ""}`
-          : `${Utils.esc(i.name)} ${Utils.formatQuantity(i.quantity, i.unit)}`;
+        let label;
+        if (i.type === "eatout") {
+          label = `${i.eatoutType === "group" ? "🍻 外食（複数）" : "🍜 外食（一人）"}${i.memo ? `（${Utils.esc(i.memo)}）` : ""}`;
+        } else if (i.type === "other") {
+          label = `${i.otherFoodType === "drink" ? "🥤 ジュース" : "🍬 お菓子"}${i.memo ? `（${Utils.esc(i.memo)}）` : ""}`;
+        } else {
+          label = `${Utils.esc(i.name)} ${Utils.formatQuantity(i.quantity, i.unit)}`;
+        }
         return `
           <div class="purchase-item-line">
             <span>${label}</span>
@@ -303,7 +414,7 @@ const Purchase = {
   },
 
   // ------------------------------------------------------
-  // 購入履歴の編集・削除
+  // 食費登録履歴の編集・削除
   // ------------------------------------------------------
   openEdit(id) {
     const p = Storage.getPurchases().find((x) => x.id === id);
@@ -311,13 +422,56 @@ const Purchase = {
 
     let body;
     if (p.type === "eatout") {
+      const linked = Storage.getCookedHistory().find((h) => h.sourcePurchaseId === id) || {};
       body = `
         <div class="form-row">
           <div class="form-group"><label>日付</label><input type="date" id="edit-date" class="input" value="${p.date}"></div>
           <div class="form-group"><label>店名</label><input type="text" id="edit-store" class="input" value="${Utils.esc(p.store)}"></div>
         </div>
+        <div class="form-group">
+          <label>区分</label>
+          <select id="edit-eatout-type" class="input">
+            <option value="solo" ${p.eatoutType !== "group" ? "selected" : ""}>外食（一人）</option>
+            <option value="group" ${p.eatoutType === "group" ? "selected" : ""}>外食（複数）</option>
+          </select>
+        </div>
         <div class="form-group"><label>金額</label><input type="number" id="edit-price" class="input" value="${p.price}"></div>
         <div class="form-group"><label>メモ（任意）</label><input type="text" id="edit-memo" class="input" value="${Utils.esc(p.memo || "")}"></div>
+        <div class="form-group">
+          <label>栄養情報（任意）</label>
+          <div class="nutrition-input-grid">
+            <input type="number" id="edit-kcal" class="input" placeholder="kcal" value="${linked.kcal || ""}">
+            <input type="number" id="edit-protein" class="input" placeholder="タンパク質(g)" value="${linked.protein || ""}">
+            <input type="number" id="edit-fat" class="input" placeholder="脂質(g)" value="${linked.fat || ""}">
+            <input type="number" id="edit-carb" class="input" placeholder="炭水化物(g)" value="${linked.carb || ""}">
+          </div>
+        </div>
+      `;
+    } else if (p.type === "other") {
+      const linked = Storage.getCookedHistory().find((h) => h.sourcePurchaseId === id) || {};
+      body = `
+        <div class="form-row">
+          <div class="form-group"><label>日付</label><input type="date" id="edit-date" class="input" value="${p.date}"></div>
+          <div class="form-group"><label>店名</label><input type="text" id="edit-store" class="input" value="${Utils.esc(p.store)}"></div>
+        </div>
+        <div class="form-group">
+          <label>区分</label>
+          <select id="edit-other-type" class="input">
+            <option value="snack" ${p.otherFoodType !== "drink" ? "selected" : ""}>お菓子</option>
+            <option value="drink" ${p.otherFoodType === "drink" ? "selected" : ""}>ジュース</option>
+          </select>
+        </div>
+        <div class="form-group"><label>金額</label><input type="number" id="edit-price" class="input" value="${p.price}"></div>
+        <div class="form-group"><label>メモ（任意）</label><input type="text" id="edit-memo" class="input" value="${Utils.esc(p.memo || "")}"></div>
+        <div class="form-group">
+          <label>栄養情報（任意）</label>
+          <div class="nutrition-input-grid">
+            <input type="number" id="edit-kcal" class="input" placeholder="kcal" value="${linked.kcal || ""}">
+            <input type="number" id="edit-protein" class="input" placeholder="タンパク質(g)" value="${linked.protein || ""}">
+            <input type="number" id="edit-fat" class="input" placeholder="脂質(g)" value="${linked.fat || ""}">
+            <input type="number" id="edit-carb" class="input" placeholder="炭水化物(g)" value="${linked.carb || ""}">
+          </div>
+        </div>
       `;
     } else {
       body = `
@@ -340,7 +494,7 @@ const Purchase = {
       `;
     }
 
-    Modal.open("購入履歴を編集", body, [
+    Modal.open("食費登録履歴を編集", body, [
       { label: "キャンセル", class: "btn-outline", onClick: () => Modal.close() },
       { label: "保存する", class: "btn-primary", onClick: () => Purchase.saveEdit(id) },
     ]);
@@ -357,20 +511,42 @@ const Purchase = {
       return;
     }
 
-    // 旧内容による在庫への影響を一度取り消す（自炊のみ）
     if (p.type === "self") {
       Storage.subtractInventoryOnPurchaseUndo(p.name, p.quantity, p.unit);
     }
 
     let updates;
+    let nutrition = null;
     if (p.type === "eatout") {
       const price = Number(document.getElementById("edit-price").value);
       const memo = document.getElementById("edit-memo").value.trim();
+      const eatoutType = document.getElementById("edit-eatout-type").value;
       if (!price || price <= 0) {
         alert("金額を入力してください。");
         return;
       }
-      updates = { date, store, price, memo };
+      updates = { date, store, price, memo, eatoutType };
+      nutrition = {
+        kcal: Number(document.getElementById("edit-kcal").value) || 0,
+        protein: Number(document.getElementById("edit-protein").value) || 0,
+        fat: Number(document.getElementById("edit-fat").value) || 0,
+        carb: Number(document.getElementById("edit-carb").value) || 0,
+      };
+    } else if (p.type === "other") {
+      const price = Number(document.getElementById("edit-price").value);
+      const memo = document.getElementById("edit-memo").value.trim();
+      const otherFoodType = document.getElementById("edit-other-type").value;
+      if (!price || price <= 0) {
+        alert("金額を入力してください。");
+        return;
+      }
+      updates = { date, store, price, memo, otherFoodType };
+      nutrition = {
+        kcal: Number(document.getElementById("edit-kcal").value) || 0,
+        protein: Number(document.getElementById("edit-protein").value) || 0,
+        fat: Number(document.getElementById("edit-fat").value) || 0,
+        carb: Number(document.getElementById("edit-carb").value) || 0,
+      };
     } else {
       const name = document.getElementById("edit-name").value.trim();
       const quantity = Number(document.getElementById("edit-quantity").value);
@@ -378,7 +554,6 @@ const Purchase = {
       const price = Number(document.getElementById("edit-price").value) || 0;
       if (!name || isNaN(quantity) || quantity <= 0) {
         alert("食材名と数量を正しく入力してください。");
-        // 在庫の取り消しを行った直後にバリデーションで中断すると整合性が崩れるため、取り消しを元に戻す
         Storage.addOrUpdateInventoryOnPurchase(p.name, p.quantity, p.unit);
         return;
       }
@@ -387,13 +562,21 @@ const Purchase = {
 
     Storage.updatePurchase(id, updates);
 
-    // 新しい内容を在庫へ反映（自炊のみ）
     if (p.type === "self") {
       Storage.addOrUpdateInventoryOnPurchase(updates.name, updates.quantity, updates.unit);
+    } else {
+      const linked = Storage.getCookedHistory().find((h) => h.sourcePurchaseId === id);
+      if (linked) {
+        const mealCategory = p.type === "eatout"
+          ? (updates.eatoutType === "group" ? "eatout_group" : "eatout_solo")
+          : (updates.otherFoodType === "drink" ? "drink" : "snack");
+        const name = p.type === "eatout" ? store : (updates.otherFoodType === "drink" ? "ジュース" : "お菓子");
+        Storage.updateCookedHistory(linked.id, { date, name, mealCategory, cost: updates.price, ...nutrition });
+      }
     }
 
     Modal.close();
-    Toast.show("購入履歴を更新しました");
+    Toast.show("食費登録履歴を更新しました");
     this.render();
   },
 
@@ -401,15 +584,18 @@ const Purchase = {
     const p = Storage.getPurchases().find((x) => x.id === id);
     if (!p) return;
     const message = p.type === "self"
-      ? "この購入履歴を削除しますか？（対応する在庫も同時に減算されます）"
-      : "この購入履歴を削除しますか？";
+      ? "この食費登録履歴を削除しますか？（対応する在庫も同時に減算されます）"
+      : "この食費登録履歴を削除しますか？（連携している食事履歴も削除されます）";
     if (!confirm(message)) return;
 
     if (p.type === "self") {
       Storage.subtractInventoryOnPurchaseUndo(p.name, p.quantity, p.unit);
+    } else {
+      const linked = Storage.getCookedHistory().find((h) => h.sourcePurchaseId === id);
+      if (linked) Storage.deleteCookedHistory(linked.id);
     }
     Storage.deletePurchase(id);
-    Toast.show("購入履歴を削除しました");
+    Toast.show("食費登録履歴を削除しました");
     this.render();
   },
 };

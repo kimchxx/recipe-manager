@@ -153,17 +153,18 @@ p { margin: 0; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   background: none;
   border: none;
-  padding: 8px 2px;
+  padding: 8px 1px;
   color: var(--color-text-sub);
   border-radius: var(--radius-s);
   transition: color 0.15s ease, background 0.15s ease;
+  min-width: 0;
 }
 
-.nav-item .nav-icon { font-size: 21px; line-height: 1; }
-.nav-item .nav-label { font-size: 11px; font-weight: 500; }
+.nav-item .nav-icon { font-size: 19px; line-height: 1; }
+.nav-item .nav-label { font-size: 9.5px; font-weight: 500; white-space: nowrap; }
 
 .nav-item.active {
   color: var(--color-accent-dark);
@@ -258,6 +259,21 @@ p { margin: 0; }
 
 /* --- 在庫カード --- */
 .inventory-card { display: flex; flex-direction: column; }
+.inventory-card-duplicate {
+  border: 1.5px solid var(--color-danger);
+  background: var(--color-danger-light);
+}
+.duplicate-badge {
+  display: inline-block;
+  background: var(--color-danger);
+  color: var(--color-white);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: var(--radius-round);
+  margin-left: 6px;
+  vertical-align: middle;
+}
 .badge {
   display: inline-block;
   font-size: 12px;
@@ -384,6 +400,7 @@ p { margin: 0; }
   font-weight: 500;
 }
 .tag-muted { font-size: 12px; color: var(--color-text-sub); }
+.tag-course { background: var(--color-bg-sub-strong); color: var(--color-text); }
 
 .recipe-rating { margin-top: 8px; font-size: 13px; }
 .star { font-size: 14px; }
@@ -491,6 +508,182 @@ p { margin: 0; }
 
 /* --- 調理履歴カード --- */
 .cooked-history-card { display: flex; flex-direction: column; }
+.meal-history-card { display: flex; flex-direction: column; }
+
+/* --- 栄養情報の入力欄（食費登録・食事履歴で共通） --- */
+.nutrition-input-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.nutrition-input-grid input { padding: 9px 8px; font-size: 13px; }
+
+/* --- 🍽食事管理：栄養目標の達成度 --- */
+.nutrition-goal-row { padding: 10px 0; border-bottom: 1px solid var(--color-border); }
+.nutrition-goal-row:last-of-type { border-bottom: none; }
+.nutrition-goal-row-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.nutrition-goal-remaining {
+  font-weight: 700;
+  color: var(--color-accent-dark);
+}
+
+/* ==========================================================
+   お金管理機能（家計簿）
+   ========================================================== */
+
+.expense-card { display: flex; flex-direction: column; }
+
+.income-rows { margin-bottom: 4px; }
+.income-amount { color: var(--color-accent-dark); }
+
+/* --- ドーナツグラフ（カテゴリ別支出） --- */
+/* --- 折れ線グラフ（推移グラフ全般） --- */
+.line-chart-wrap {
+  width: 100%;
+  padding: 6px 0 2px;
+}
+.line-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.line-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+.line-chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--color-text-sub);
+}
+.line-chart-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.donut-chart-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 20px;
+}
+.donut-chart {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.donut-chart-hole {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: var(--color-white);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(80, 70, 40, 0.08);
+}
+.donut-chart-total-label { font-size: 11px; color: var(--color-text-sub); }
+.donut-chart-total-value { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--color-text); margin-top: 2px; }
+
+.expense-legend-list { display: flex; flex-direction: column; gap: 4px; }
+.expense-legend-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13.5px;
+  border-bottom: 1px dashed var(--color-border);
+}
+.expense-legend-row:last-child { border-bottom: none; }
+.expense-legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.expense-legend-name { color: var(--color-text); }
+.expense-legend-amount { font-weight: 700; color: var(--color-text); }
+.expense-legend-pct { font-size: 12px; color: var(--color-text-sub); min-width: 40px; text-align: right; }
+
+/* --- カテゴリ別予算 --- */
+.category-budget-row { padding: 12px 0; border-bottom: 1px solid var(--color-border); }
+.category-budget-row-total {
+  background: var(--color-accent-light);
+  border-radius: var(--radius-s);
+  padding: 12px 10px;
+  margin-bottom: 6px;
+  border-bottom: none;
+}
+.category-budget-row-total .category-budget-name { color: var(--color-accent-dark); }
+
+/* --- カテゴリ別予算 一括編集：リアルタイム合計 --- */
+.cat-budget-batch-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-bg-sub);
+  border-radius: var(--radius-s);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+#cat-budget-batch-total { font-family: var(--font-display); font-size: 17px; color: var(--color-accent-dark); }
+.category-budget-row:last-child { border-bottom: none; }
+.category-budget-row-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.category-budget-name { font-weight: 700; }
+.category-budget-row-sub {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-text-sub);
+  margin-top: 6px;
+}
+
+/* --- カテゴリ種別設定モーダル --- */
+.cat-settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 14px;
+}
+.cat-settings-row:last-child { border-bottom: none; }
+.cat-settings-row select { width: 110px; padding: 6px 8px; font-size: 13px; }
+
+/* --- カテゴリ別予算 一括編集モーダル --- */
+.cat-budget-batch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 13.5px;
+}
+.cat-budget-batch-row:last-child { border-bottom: none; }
+.cat-budget-batch-row input { width: 110px; padding: 7px 8px; font-size: 13px; text-align: right; }
 
 /* ==========================================================
    フォーム共通
@@ -579,6 +772,94 @@ label { font-size: 13px; color: var(--color-text-sub); font-weight: 500; }
 
 .search-bar { margin-bottom: 16px; }
 
+/* --- 年月切替バー --- */
+.month-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.month-switcher-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-round);
+  border: none;
+  background: var(--color-white);
+  color: var(--color-accent-dark);
+  font-size: 15px;
+  box-shadow: var(--shadow-card);
+}
+.month-switcher-btn:active { background: var(--color-accent-light); }
+.month-switcher-label {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  min-width: 110px;
+  text-align: center;
+}
+
+/* --- レシピ分類フィルター --- */
+.course-filter-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.course-filter-btn {
+  flex: 1;
+  padding: 9px 6px;
+  border-radius: var(--radius-round);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-white);
+  color: var(--color-text-sub);
+  font-size: 13px;
+  font-weight: 700;
+}
+.course-filter-btn.active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+  color: var(--color-accent-dark);
+}
+
+/* --- レシピジャンルフィルター（項目数が多いので折り返しチップ形式） --- */
+.genre-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 16px;
+}
+.genre-filter-btn {
+  padding: 7px 13px;
+  border-radius: var(--radius-round);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-white);
+  color: var(--color-text-sub);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.genre-filter-btn.active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+  color: var(--color-accent-dark);
+  font-weight: 700;
+}
+
+/* --- レシピ登録/編集フォーム：分類チェックボックス --- */
+.course-checkbox-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.course-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+.course-checkbox input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--color-accent); }
+
 /* --- 区分トグル（自炊 / 外食） --- */
 .type-toggle {
   display: flex;
@@ -666,6 +947,30 @@ label { font-size: 13px; color: var(--color-text-sub); font-weight: 500; }
 
 .home-quick-actions { margin-bottom: 8px; }
 
+/* --- ホーム：カテゴリ別予算使用率（ミニ表示） --- */
+.category-budget-mini-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.category-budget-mini-name { font-size: 12.5px; color: var(--color-text); }
+.category-budget-mini-bar { height: 7px; }
+.category-budget-mini-pct { font-size: 12px; text-align: right; color: var(--color-text-sub); }
+
+/* --- ホーム：在庫不足チップ --- */
+.shortage-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.shortage-chip {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+  font-size: 12.5px;
+  padding: 5px 12px;
+  border-radius: var(--radius-round);
+  font-weight: 500;
+}
+.shortage-chip-more { background: var(--color-bg-sub-strong); color: var(--color-text-sub); }
+
 /* --- 今月の食費予算カード（ホーム / 分析共通） --- */
 .budget-card { cursor: pointer; }
 .budget-card-row {
@@ -686,6 +991,25 @@ label { font-size: 13px; color: var(--color-text-sub); font-weight: 500; }
 .over-budget { color: var(--color-danger); }
 
 .budget-bar-track { height: 10px; margin-bottom: 10px; }
+
+/* --- 2項目を比較するための分割バー（自炊率・外食率など） --- */
+.split-bar-track {
+  display: flex;
+  height: 10px;
+  border-radius: var(--radius-round);
+  overflow: hidden;
+  background: var(--color-bg-sub);
+  margin-bottom: 10px;
+}
+.split-bar-segment { height: 100%; }
+.split-bar-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
 .bar-fill-over { background: var(--color-danger); }
 
 .budget-card-sub {
@@ -738,6 +1062,58 @@ label { font-size: 13px; color: var(--color-text-sub); font-weight: 500; }
 }
 .bar-fill { height: 100%; background: var(--color-accent); border-radius: var(--radius-round); }
 .bar-fill-accent { background: var(--color-gold); }
+.bar-fill-accent2 { background: #B25D45; }
+.bar-fill-accent3 { background: #7C97A3; }
+.bar-fill-accent4 { background: #9C7CB0; }
+.analysis-row-current .analysis-row-label { color: var(--color-accent-dark); font-weight: 700; }
+
+/* --- 📊分析：カテゴリ別推移テーブル --- */
+.category-trend-table { overflow-x: auto; }
+.category-trend-row {
+  display: grid;
+  grid-template-columns: 74px repeat(6, 1fr);
+  gap: 4px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 11.5px;
+  min-width: 380px;
+}
+.category-trend-row:last-child { border-bottom: none; }
+.category-trend-row span { text-align: right; }
+.category-trend-name { text-align: left !important; font-weight: 700; font-size: 12.5px; }
+.category-trend-header {
+  font-size: 11px;
+  color: var(--color-text-sub);
+  font-weight: 700;
+  border-bottom: 1.5px solid var(--color-border);
+}
+.category-trend-header span:first-child { text-align: left; }
+
+/* --- 📊分析：ランキング --- */
+.ranking-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 14px;
+}
+.ranking-row:last-child { border-bottom: none; }
+.ranking-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-accent-light);
+  color: var(--color-accent-dark);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ranking-name { flex: 1; }
+.ranking-value { font-weight: 700; color: var(--color-text); }
 .analysis-row-values {
   display: flex;
   gap: 12px;

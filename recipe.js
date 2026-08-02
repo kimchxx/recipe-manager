@@ -10,6 +10,8 @@
 
 const Recipe = {
   searchKeyword: "",
+  courseFilter: [], // 選択中の分類フィルター（主食/主菜/副菜。複数選択可）
+  genreFilter: [], // 選択中のジャンルフィルター（和食/洋食/中華...。複数選択可）
   editingMaterials: [], // 登録/編集フォームの材料一時データ
   _detailId: null, // 現在詳細表示中のレシピID（ブックマーク操作時の再描画判定用）
 
@@ -28,6 +30,16 @@ const Recipe = {
         <input type="text" id="recipe-search" class="input" placeholder="🔍 料理名・材料・ジャンル・備考で検索"
           value="${Utils.esc(this.searchKeyword)}" oninput="Recipe.onSearch(this.value)">
       </div>
+      <div class="course-filter-row" id="course-filter-row">
+        ${RECIPE_COURSE_TYPES.map((t) => `
+          <button type="button" class="course-filter-btn ${this.courseFilter.includes(t) ? "active" : ""}" data-course="${t}" onclick="Recipe.toggleCourseFilter('${t}')">${t}</button>
+        `).join("")}
+      </div>
+      <div class="genre-filter-row" id="genre-filter-row">
+        ${RECIPE_GENRES.map((g) => `
+          <button type="button" class="genre-filter-btn ${this.genreFilter.includes(g) ? "active" : ""}" data-genre="${g}" onclick="Recipe.toggleGenreFilter('${g}')">${g}</button>
+        `).join("")}
+      </div>
       <div class="card-list" id="recipe-list"></div>
     `;
     this.renderList();
@@ -35,6 +47,30 @@ const Recipe = {
 
   onSearch(value) {
     this.searchKeyword = value;
+    this.renderList();
+  },
+
+  /** 分類フィルターボタンのON/OFF切り替え（複数選択可。ANY一致で絞り込む） */
+  toggleCourseFilter(type) {
+    const idx = this.courseFilter.indexOf(type);
+    if (idx === -1) this.courseFilter.push(type);
+    else this.courseFilter.splice(idx, 1);
+
+    document.querySelectorAll("#course-filter-row .course-filter-btn").forEach((btn) => {
+      btn.classList.toggle("active", this.courseFilter.includes(btn.dataset.course));
+    });
+    this.renderList();
+  },
+
+  /** ジャンルフィルターボタンのON/OFF切り替え（複数選択可。ANY一致で絞り込む） */
+  toggleGenreFilter(genre) {
+    const idx = this.genreFilter.indexOf(genre);
+    if (idx === -1) this.genreFilter.push(genre);
+    else this.genreFilter.splice(idx, 1);
+
+    document.querySelectorAll("#genre-filter-row .genre-filter-btn").forEach((btn) => {
+      btn.classList.toggle("active", this.genreFilter.includes(btn.dataset.genre));
+    });
     this.renderList();
   },
 
@@ -47,6 +83,12 @@ const Recipe = {
         const haystack = `${r.name} ${materialsText} ${r.genre} ${r.note || ""}`.toLowerCase();
         return haystack.includes(kw);
       });
+    }
+    if (this.courseFilter.length > 0) {
+      list = list.filter((r) => (r.courseTypes || []).some((t) => this.courseFilter.includes(t)));
+    }
+    if (this.genreFilter.length > 0) {
+      list = list.filter((r) => this.genreFilter.includes(r.genre));
     }
     // お気に入りを上位表示、その中でも評価順
     list = list.slice().sort((a, b) => {
@@ -80,6 +122,7 @@ const Recipe = {
           <div class="card-title">${favMark}${Utils.esc(r.name)}</div>
           <div class="recipe-meta">
             <span class="tag">${Utils.esc(r.genre)}</span>
+            ${(r.courseTypes || []).map((t) => `<span class="tag tag-course">${Utils.esc(t)}</span>`).join("")}
             <span class="tag-muted">⏱ ${r.cookTime}分　👤 ${r.servings}人分</span>
           </div>
           <div class="recipe-rating">${Utils.ratingStarsHtml(r.rating)} <span class="rating-num">${r.rating}</span></div>
@@ -171,6 +214,7 @@ const Recipe = {
         </div>
         <div class="recipe-meta">
           <span class="tag">${Utils.esc(r.genre)}</span>
+          ${(r.courseTypes || []).map((t) => `<span class="tag tag-course">${Utils.esc(t)}</span>`).join("")}
           <span class="tag-muted">⏱ ${r.cookTime}分　👤 ${r.servings}人分</span>
         </div>
         <div class="recipe-rating-row">
@@ -222,7 +266,7 @@ const Recipe = {
 
     Storage.addCookedHistory({
       date: Utils.todayISO(), recipeId: r.id, name: r.name, servings: r.servings,
-      cost: cost !== null ? cost : 0, materials: materialsUsed, isManual: false,
+      cost: cost !== null ? cost : 0, materials: materialsUsed, isManual: false, mealCategory: "self_recipe",
     });
 
     Toast.show(shortages.length > 0
@@ -290,7 +334,7 @@ const Recipe = {
 
     Storage.addCookedHistory({
       date: Utils.todayISO(), recipeId: r.id, name: r.name, servings: r.servings,
-      cost: cost !== null ? cost : 0, materials: usedMaterials, isManual: false,
+      cost: cost !== null ? cost : 0, materials: usedMaterials, isManual: false, mealCategory: "self_recipe",
     });
 
     Modal.close();
@@ -350,6 +394,18 @@ const Recipe = {
         <div class="form-group">
           <label>料理名</label>
           <input type="text" id="rf-name" class="input" placeholder="例: 鯛めし" value="${editing ? Utils.esc(editing.name) : ""}">
+        </div>
+
+        <div class="form-group">
+          <label>分類（複数選択可）</label>
+          <div class="course-checkbox-row">
+            ${RECIPE_COURSE_TYPES.map((t) => `
+              <label class="course-checkbox">
+                <input type="checkbox" name="rf-course" value="${t}" ${editing && (editing.courseTypes || []).includes(t) ? "checked" : ""}>
+                <span>${t}</span>
+              </label>
+            `).join("")}
+          </div>
         </div>
 
         <div class="form-row">
@@ -486,6 +542,7 @@ const Recipe = {
   saveForm(id) {
     const name = document.getElementById("rf-name").value.trim();
     const genre = document.getElementById("rf-genre").value;
+    const courseTypes = Array.from(document.querySelectorAll('input[name="rf-course"]:checked')).map((el) => el.value);
     const cookTime = parseInt(document.getElementById("rf-cooktime").value, 10) || 0;
     const servings = parseInt(document.getElementById("rf-servings").value, 10) || 1;
     const rating = Math.round((parseFloat(document.getElementById("rf-rating").value) || 0) * 2) / 2;
@@ -507,7 +564,7 @@ const Recipe = {
       return;
     }
 
-    const data = { name, genre, cookTime, servings, rating, favorite, steps, note, photoUrl, materials };
+    const data = { name, genre, courseTypes, cookTime, servings, rating, favorite, steps, note, photoUrl, materials };
 
     if (!id) {
       data.mealPlan = false;

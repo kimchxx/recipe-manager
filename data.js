@@ -92,6 +92,9 @@ const RECIPE_GENRES = [
   "和食", "洋食", "中華", "韓国料理", "イタリアン", "和菓子・デザート", "その他",
 ];
 
+// レシピの分類（主食/主菜/副菜）。1レシピに複数選択可能（例：主菜にも副菜にもなる料理）
+const RECIPE_COURSE_TYPES = ["主食", "主菜", "副菜"];
+
 // ==========================================================
 // 食材マスター（サンプルデータ／動作確認用）
 // manageType: "quantity"(数量管理) / "no_quantity"(少々・適量のみで管理)
@@ -123,6 +126,7 @@ const INITIAL_RECIPES = [
     id: "R001",
     name: "鯛めし",
     genre: "和食",
+    courseTypes: ["主食"],
     cookTime: 40,
     servings: 2,
     rating: 4.5,
@@ -148,7 +152,7 @@ const INITIAL_PURCHASES = [
   { id: "P001", date: todayStr(-5), store: "スーパー", type: "self", name: "鯛", quantity: 2, unit: "匹", price: 1980 },
   { id: "P002", date: todayStr(-5), store: "スーパー", type: "self", name: "米", quantity: 10, unit: "合", price: 600 },
   { id: "P003", date: todayStr(-3), store: "スーパー", type: "self", name: "白だし", quantity: 1, unit: "本", price: 400 },
-  { id: "P004", date: todayStr(-2), store: "定食屋", type: "eatout", name: "", quantity: "", unit: "", price: 950, memo: "ランチ" },
+  { id: "P004", date: todayStr(-2), store: "定食屋", type: "eatout", eatoutType: "solo", name: "", quantity: "", unit: "", price: 950, memo: "ランチ" },
 ];
 
 // ==========================================================
@@ -186,6 +190,72 @@ const MEAL_PLAN_SORT_OPTIONS = [
   // 例: { key: "ratingDesc", label: "評価が高い順" } のように追加可能
 ];
 const MEAL_PLAN_DEFAULT_SORT = "addedDesc";
+
+// ==========================================================
+// お金管理機能（家計簿）
+// ---------------------------------------------------------
+// 既存の「食費管理（購入履歴）」「食費予算」はそのまま維持し、
+// この機能はそれらと並行して動く独立した仕組みとして追加している。
+// 「食費」は支出カテゴリの一覧に1つだけ含まれるが、実際の金額は
+// 購入履歴（自炊/外食）＋支出履歴のお菓子・ジュース分を合算して
+// 都度計算するため、支出履歴には「自炊/外食」分は保存しない
+// （二重入力を避けるため）。お菓子・ジュースのみ、支出管理画面の
+// 専用エリアから「食費」カテゴリの内訳として登録できる。
+// ==========================================================
+
+// 支出カテゴリ（種別: "固定費" または "変動費"）
+// ※ 元「ジム」は「サブスク」へ統合、元「外食」カテゴリは廃止
+//   （食費区分の一部として「食費」カテゴリに統合）
+const INITIAL_EXPENSE_CATEGORIES = [
+  // 固定費
+  { name: "家賃", type: "固定費" },
+  { name: "水道光熱費", type: "固定費" },
+  { name: "通信費", type: "固定費" },
+  { name: "保険", type: "固定費" },
+  { name: "サブスク", type: "固定費" },
+  // 変動費
+  { name: "食費", type: "変動費" },       // 自炊/外食(購入履歴)＋お菓子/ジュース(支出履歴)の合算。金額はここには持たない
+  { name: "日用品", type: "変動費" },
+  { name: "交通費", type: "変動費" },
+  { name: "被服費", type: "変動費" },
+  { name: "美容", type: "変動費" },
+  { name: "医療", type: "変動費" },
+  { name: "教育費", type: "変動費" },
+  { name: "趣味", type: "変動費" },
+  { name: "交際費", type: "変動費" },
+  { name: "投資", type: "変動費" },
+  { name: "その他", type: "変動費" },
+];
+
+// 食費区分（🛒購入登録＝自炊/外食(一人/複数)、💴支出管理＝お菓子/ジュース）
+const FOOD_TYPE_SELF = "自炊";
+const FOOD_TYPE_EATOUT_SOLO = "外食（一人）";
+const FOOD_TYPE_EATOUT_GROUP = "外食（複数）";
+const FOOD_TYPE_SNACK = "お菓子";
+const FOOD_TYPE_DRINK = "ジュース";
+const FOOD_TYPES_ALL = [FOOD_TYPE_SELF, FOOD_TYPE_EATOUT_SOLO, FOOD_TYPE_EATOUT_GROUP, FOOD_TYPE_SNACK, FOOD_TYPE_DRINK];
+
+// 支出履歴（サンプル：食費以外の動作確認用）
+const INITIAL_EXPENSES = [
+  { id: "EX001", date: todayStr(-10), category: "家賃", amount: 75000, place: "", memo: "" },
+  { id: "EX002", date: todayStr(-8), category: "通信費", amount: 4500, place: "キャリアA", memo: "" },
+  { id: "EX003", date: todayStr(-6), category: "サブスク", amount: 1500, place: "", memo: "動画配信・ジム統合" },
+];
+
+// 収入履歴（サンプル）
+const INITIAL_INCOMES = [
+  { id: "IN001", date: todayStr(-15), amount: 250000, source: "給与", memo: "" },
+];
+
+// カテゴリ別予算（サンプル：今月分のみ設定）
+const INITIAL_CATEGORY_BUDGETS = [
+  { yearMonth: todayStr(0).slice(0, 7), category: "食費", budget: 45000 },
+  { yearMonth: todayStr(0).slice(0, 7), category: "趣味", budget: 20000 },
+  { yearMonth: todayStr(0).slice(0, 7), category: "美容", budget: 10000 },
+];
+
+// 1日あたりの栄養目標（初期値。設定画面から変更可能）
+const INITIAL_NUTRITION_TARGET = { kcal: 2000, protein: 60, fat: 60, carb: 250 };
 
 // 今日から n 日前の日付文字列(YYYY-MM-DD)を返すヘルパー（サンプルデータ生成用）
 function todayStr(offsetDays = 0) {

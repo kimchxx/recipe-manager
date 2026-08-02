@@ -71,7 +71,7 @@ const GasSync = {
     if (!json.ok) throw new Error(json.error === "unauthorized" ? "アクセスキーが正しくありません" : (json.error || "取得に失敗しました"));
     const d = json.data;
 
-    // 安全対策：接続先スプレッドシートが（見出しのみで）実質空なのに、
+    // 安全対策①：接続先スプレッドシートが（見出しのみで）実質空なのに、
     // この端末には既にデータがある場合、無警告で上書きしてしまわないよう確認を挟む
     const pulledIsEmpty = ["ingredients", "recipes", "purchases", "inventory"]
       .every((k) => !(d[k] && d[k].length));
@@ -92,25 +92,55 @@ const GasSync = {
       }
     }
 
-    Storage.setIngredients((d.ingredients || []).map(this._mapIngredientFromSheet));
-    Storage.setCategories((d.categories || []).map(this._mapCategoryFromSheet));
-    Storage.setUnitConversions((d.unitConversions || []).map(this._mapUnitConversionFromSheet));
-    Storage.setPurchases((d.purchases || []).map(this._mapPurchaseFromSheet));
-    Storage.setInventory((d.inventory || []).map(this._mapInventoryFromSheet));
+    // 安全対策②：行数はあるのに金額の合計が不自然に0円（＝列がズレて読み込めていない
+    // 可能性が高い）場合も、無警告で上書きしないよう確認を挟む。
+    // シート側の列見出しがアプリの想定と1つでもズレていると、金額列を正しく読めず
+    // 0円のデータで上書きしてしまう事故につながるため。
+    if (!pulledIsEmpty) {
+      const pulledPurchaseTotal = (d.purchases || []).reduce((s, row) => s + (Number(row["金額"]) || 0), 0);
+      const localPurchaseTotal = Storage.getPurchases().reduce((s, p) => s + (p.price || 0), 0);
+      if (pulledPurchaseTotal === 0 && localPurchaseTotal > 0 && (d.purchases || []).length > 0) {
+        const proceed = confirm(
+          "接続先のスプレッドシートの「購入履歴」シートを読み込んだところ、" +
+          "行数はあるのに金額の合計が0円になっています。\n" +
+          "これはシートの列（見出し）の並びが崩れていて、正しく読み取れていない可能性があります。\n\n" +
+          "このまま同期すると、この端末に保存されている正しいデータが0円の内容で上書きされてしまいます。\n\n" +
+          "スプレッドシートの列の並びを確認済みで、問題なければ「OK」を、" +
+          "不安であれば「キャンセル」を押してシートの見出し行をご確認ください。"
+        );
+        if (!proceed) {
+          throw new Error("金額が正しく読み取れなかったため、同期を中止しました");
+        }
+      }
+    }
 
-    const materials = (d.recipeMaterials || []).map(this._mapMaterialFromSheet);
-    Storage.setRecipes((d.recipes || []).map((r) => this._mapRecipeFromSheet(r, materials)));
+    // ここから先はローカルデータを書き換える。読み込んだ内容をそのまま
+    // スプレッドシートへ書き戻してしまわないよう、この間はpushを止めておく
+    // （読み込みが万一間違っていた場合に、その間違いを書き戻して悪化させないため）
+    this._suppressPush = true;
+    try {
+      Storage.setIngredients((d.ingredients || []).map(this._mapIngredientFromSheet));
+      Storage.setCategories((d.categories || []).map(this._mapCategoryFromSheet));
+      Storage.setUnitConversions((d.unitConversions || []).map(this._mapUnitConversionFromSheet));
+      Storage.setPurchases((d.purchases || []).map(this._mapPurchaseFromSheet));
+      Storage.setInventory((d.inventory || []).map(this._mapInventoryFromSheet));
 
-    Storage.setShoppingList((d.shoppingList || []).map(this._mapShoppingFromSheet));
-    Storage.setCookedHistory((d.cookedHistory || []).map(this._mapCookedFromSheet));
-    Storage.setBudgets((d.settings || []).map(this._mapBudgetFromSheet).filter((b) => b.yearMonth));
+      const materials = (d.recipeMaterials || []).map(this._mapMaterialFromSheet);
+      Storage.setRecipes((d.recipes || []).map((r) => this._mapRecipeFromSheet(r, materials)));
 
-    Storage.setExpenses((d.expenses || []).map(this._mapExpenseFromSheet));
-    Storage.setExpenseCategories((d.expenseCategories || []).map(this._mapExpenseCategoryFromSheet).filter((c) => c.name));
-    Storage.setIncomes((d.incomes || []).map(this._mapIncomeFromSheet));
-    Storage.setCategoryBudgets((d.categoryBudgets || []).map(this._mapCategoryBudgetFromSheet).filter((b) => b.yearMonth && b.category));
-    if (d.nutritionTarget && d.nutritionTarget.length > 0) {
-      Storage.setNutritionTarget(this._mapNutritionTargetFromSheet(d.nutritionTarget[0]));
+      Storage.setShoppingList((d.shoppingList || []).map(this._mapShoppingFromSheet));
+      Storage.setCookedHistory((d.cookedHistory || []).map(this._mapCookedFromSheet));
+      Storage.setBudgets((d.settings || []).map(this._mapBudgetFromSheet).filter((b) => b.yearMonth));
+
+      Storage.setExpenses((d.expenses || []).map(this._mapExpenseFromSheet));
+      Storage.setExpenseCategories((d.expenseCategories || []).map(this._mapExpenseCategoryFromSheet).filter((c) => c.name));
+      Storage.setIncomes((d.incomes || []).map(this._mapIncomeFromSheet));
+      Storage.setCategoryBudgets((d.categoryBudgets || []).map(this._mapCategoryBudgetFromSheet).filter((b) => b.yearMonth && b.category));
+      if (d.nutritionTarget && d.nutritionTarget.length > 0) {
+        Storage.setNutritionTarget(this._mapNutritionTargetFromSheet(d.nutritionTarget[0]));
+      }
+    } finally {
+      this._suppressPush = false;
     }
 
     App.renderIngredientDatalist();
@@ -352,6 +382,7 @@ const GasSync = {
 
   _debouncedPush(sheetKey, getRowsFn) {
     if (!this.isConfigured()) return;
+    if (this._suppressPush) return; // pullAll()実行中は、読み込んだデータをそのまま書き戻さない
     clearTimeout(this._pushTimers[sheetKey]);
     this._pushTimers[sheetKey] = setTimeout(() => {
       this._runPush(sheetKey, getRowsFn);
@@ -446,9 +477,58 @@ const GasSync = {
       const actions = document.getElementById("gas-settings-actions");
       actions.innerHTML = `
         <button class="btn btn-outline btn-block" onclick="GasSync.manualSync()">🔄 今すぐ同期する</button>
+        <button class="btn btn-outline btn-block" onclick="GasSync.runDiagnostics()">🔍 読み取り内容を診断する</button>
         <button class="btn btn-outline btn-block" onclick="GasSync.doBackup()">🗂 バックアップを作成する</button>
         <button class="btn btn-danger-outline btn-block" onclick="GasSync.disconnect()">連携を解除する</button>
       `;
+    }
+  },
+
+  /**
+   * 診断機能：実際にスプレッドシートから読み取った「見出し」と「1行目の値」を
+   * そのまま画面に表示する。憶測でのやり取りを避け、実際に何が読み取れているかを
+   * 正確に確認するためのツール。
+   */
+  async runDiagnostics() {
+    const url = this.getUrl();
+    const key = this.getKey();
+    if (!url || !key) {
+      alert("先に接続してください。");
+      return;
+    }
+    Toast.show("診断中...");
+    try {
+      const res = await fetch(this._buildGetUrl(url, "getAll"));
+      const json = await res.json();
+      if (!json.ok) {
+        alert("読み取りに失敗しました：" + (json.error || "不明なエラー"));
+        return;
+      }
+      const d = json.data;
+
+      const describeSheet = (key, label) => {
+        const rows = d[key] || [];
+        if (rows.length === 0) return `【${label}】\nデータ行が0件です。\n`;
+        const headers = Object.keys(rows[0]);
+        const first = rows[0];
+        const lines = headers.map((h) => `  ${h}: ${JSON.stringify(first[h])}`).join("\n");
+        return `【${label}】（全${rows.length}件）\n見出し順: ${headers.join(" / ")}\n1行目の内容:\n${lines}\n`;
+      };
+
+      const report = [
+        describeSheet("purchases", "購入履歴"),
+        describeSheet("cookedHistory", "調理履歴"),
+      ].join("\n");
+
+      const body = `
+        <p class="settings-note">スプレッドシートから実際に読み取れた内容です。見出しの並びや値がおかしくないかご確認ください。</p>
+        <textarea readonly class="input textarea" style="height:320px; font-family:monospace; font-size:11px; white-space:pre;">${Utils.esc(report)}</textarea>
+      `;
+      Modal.open("🔍 診断結果", body, [
+        { label: "閉じる", class: "btn-primary", onClick: () => Modal.close() },
+      ]);
+    } catch (err) {
+      alert("診断に失敗しました：" + err.message);
     }
   },
 

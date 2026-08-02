@@ -363,6 +363,14 @@ const GasSync = {
    * 実行中に新しい変更が入った場合は、完了後にもう一度（最新データで）送り直す。
    * これにより「後から送ったはずが先に完了し、古いデータで上書きされる」という
    * 競合状態を防いでいる。
+   *
+   * 【重要】GASのWebアプリはPOSTを受け取ると、書き込み処理そのものは
+   * すぐに完了させた上で、結果をリダイレクト経由で返す仕組みになっている。
+   * このリダイレクト先の応答を通常の（cors）モードで読み取ろうとすると、
+   * ブラウザによってはCORS制限に引っかかり、「実際は書き込みに成功しているのに
+   * 結果が受け取れずエラー扱いになる」ことがある（Safari等で頻発）。
+   * これを避けるため、送信は no-cors モードで行い、応答内容の検証はせず、
+   * 通信自体が例外なく完了したことをもって成功とみなす。
    */
   async _runPush(sheetKey, getRowsFn) {
     if (this._inFlight && this._inFlight[sheetKey]) {
@@ -374,14 +382,16 @@ const GasSync = {
     this._inFlight = this._inFlight || {};
     this._inFlight[sheetKey] = true;
     try {
-      const res = await fetch(this.getUrl(), {
+      await fetch(this.getUrl(), {
         method: "POST",
+        mode: "no-cors",
         headers: { "Content-Type": "text/plain;charset=utf-8" }, // preflight回避のためtext/plainで送信しGAS側でJSON.parseする
         body: JSON.stringify({ action: "replaceSheet", sheet: sheetKey, rows: getRowsFn(), key: this.getKey() }),
       });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error === "unauthorized" ? "アクセスキーが正しくありません" : (json.error || "同期に失敗しました"));
+      // no-corsモードでは応答内容を読み取れない（レスポンスが不透明になる）ため、
+      // 通信が例外を投げずに完了した時点で成功として扱う
     } catch (err) {
+      // ここに到達するのは、本当に通信自体が失敗した場合（オフライン等）
       console.error("GAS sync error:", err);
       Toast.show("スプレッドシートへの同期に失敗しました（" + err.message + "）");
     } finally {

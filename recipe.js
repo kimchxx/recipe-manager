@@ -299,7 +299,7 @@ const Recipe = {
           <input type="checkbox" ${m.use ? "checked" : ""} onchange="Recipe._toggleCookMaterial(${idx})">
           <span>${Utils.esc(m.name)}</span>
         </label>
-        <input type="number" class="input cook-custom-qty" step="0.01" value="${m.quantity}"
+        <input type="number" class="input cook-custom-qty" step="1" value="${m.quantity}"
           oninput="Recipe._updateCookMaterialQty(${idx}, this.value)">
         <span class="cook-custom-unit">${Utils.esc(m.unit)}</span>
       </div>
@@ -479,7 +479,7 @@ const Recipe = {
         <div class="material-row">
           <input type="text" class="input row-name" placeholder="材料名" value="${Utils.esc(m.name)}"
             oninput="Recipe.updateMaterial(${idx}, 'name', this.value)" list="ingredient-name-list">
-          <input type="number" class="input row-qty" step="0.01" placeholder="数量" value="${m.quantity}"
+          <input type="number" class="input row-qty" step="1" placeholder="数量" value="${m.quantity}"
             oninput="Recipe.updateMaterial(${idx}, 'quantity', this.value)">
           <select class="input row-unit" onchange="Recipe.updateMaterial(${idx}, 'unit', this.value)">
             ${ALL_UNITS.map((u) => `<option value="${u}" ${u === m.unit ? "selected" : ""}>${u}</option>`).join("")}

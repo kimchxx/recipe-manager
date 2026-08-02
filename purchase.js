@@ -207,7 +207,7 @@ const Purchase = {
       <div class="purchase-row">
         <input type="text" class="input row-name" placeholder="食材名" value="${Utils.esc(row.name)}"
           oninput="Purchase.updateRow(${idx}, 'name', this.value)" list="ingredient-name-list">
-        <input type="number" class="input row-qty" step="0.01" placeholder="数量" value="${row.quantity}"
+        <input type="number" class="input row-qty" step="1" placeholder="数量" value="${row.quantity}"
           oninput="Purchase.updateRow(${idx}, 'quantity', this.value)">
         <select class="input row-unit" onchange="Purchase.updateRow(${idx}, 'unit', this.value)">
           ${ALL_UNITS.map((u) => `<option value="${u}" ${u === row.unit ? "selected" : ""}>${u}</option>`).join("")}
@@ -344,13 +344,18 @@ const Purchase = {
     });
   },
 
+  /**
+   * 登録後のフォームリセット。
+   * ・日付／区分（自炊・外食・その他とそのサブ区分）は直前の入力を引き継ぐ
+   *   （同じ日にまとめて何回かに分けて登録しやすくするため）
+   * ・店名は毎回変わることが多いため、登録のたびに空欄に戻す
+   */
   resetFormKeepingDateStore(date, store) {
     const keepType = this.type;
     const keepEatoutType = this.eatoutType;
     const keepOtherType = this.otherFoodType;
     this.render();
     document.getElementById("pur-date").value = date;
-    document.getElementById("pur-store").value = store;
     if (keepType === "eatout") {
       this.setType("eatout");
       this.setEatoutType(keepEatoutType);
@@ -481,7 +486,7 @@ const Purchase = {
         </div>
         <div class="form-group"><label>食材名</label><input type="text" id="edit-name" class="input" value="${Utils.esc(p.name)}" list="ingredient-name-list"></div>
         <div class="form-row">
-          <div class="form-group"><label>数量</label><input type="number" id="edit-quantity" class="input" step="0.01" value="${p.quantity}"></div>
+          <div class="form-group"><label>数量</label><input type="number" id="edit-quantity" class="input" step="1" value="${p.quantity}"></div>
           <div class="form-group">
             <label>単位</label>
             <select id="edit-unit" class="input">

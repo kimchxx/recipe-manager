@@ -57,6 +57,7 @@ const UNIT_BASE_GROUP = {
   匹: "count_匹",
   枚: "count_枚",
   本: "count_本",
+  束: "count_束",
   合: "count_合",
   少々: "no_quantity",
   適量: "no_quantity",
@@ -74,6 +75,7 @@ const UNIT_TO_BASE_RATE = {
   匹: 1,
   枚: 1,
   本: 1,
+  束: 1,
   合: 1,
   少々: 1,
   適量: 1,
@@ -81,7 +83,7 @@ const UNIT_TO_BASE_RATE = {
 
 // 全対応単位リスト（入力フォームのプルダウン用）
 const ALL_UNITS = [
-  "g", "kg", "ml", "L", "個", "匹", "本", "枚", "合",
+  "g", "kg", "ml", "L", "個", "匹", "本", "束", "枚", "合",
   "大さじ", "小さじ", "少々", "適量",
 ];
 
@@ -115,6 +117,8 @@ const INITIAL_INGREDIENTS = [
   { id: "I012", name: "こしょう", category: "調味料", unit: "少々", manageType: "no_quantity", nutritionPer: 100, kcal: 364, protein: 11, fat: 3.3, carb: 68.7 },
   { id: "I013", name: "牛乳", category: "乳製品・卵", unit: "ml", manageType: "quantity", nutritionPer: 100, kcal: 67, protein: 3.3, fat: 3.8, carb: 4.8 },
   { id: "I014", name: "食パン", category: "主食", unit: "枚", manageType: "quantity", nutritionPer: 1, kcal: 158, protein: 5.6, fat: 2.6, carb: 28.0 },
+  { id: "I015", name: "ほうれん草", category: "野菜", unit: "束", manageType: "quantity", nutritionPer: 1, kcal: 52, protein: 6.4, fat: 0.9, carb: 7.8 },
+  { id: "I016", name: "青ネギ", category: "野菜", unit: "束", manageType: "quantity", nutritionPer: 1, kcal: 68, protein: 3.6, fat: 0.6, carb: 12.5 },
 ];
 
 // ==========================================================

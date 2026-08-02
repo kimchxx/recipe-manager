@@ -17,7 +17,7 @@
 
 const GAS_URL_KEY = "rm_gas_url";
 const GAS_ACCESS_KEY_KEY = "rm_gas_access_key";
-const COUNT_UNITS = ["個", "匹", "枚", "本", "合"]; // 個数系単位（栄養計算の基準が1単位あたりになるもの）
+const COUNT_UNITS = ["個", "匹", "枚", "本", "束", "合"]; // 個数系単位（栄養計算の基準が1単位あたりになるもの）
 
 const GasSync = {
   _pushTimers: {},

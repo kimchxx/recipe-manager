@@ -50,7 +50,7 @@ const Shopping = {
       <div class="form-row">
         <div class="form-group">
           <label>数量（任意）</label>
-          <input type="number" id="sl-quantity" class="input" step="0.01">
+          <input type="number" id="sl-quantity" class="input" step="1">
         </div>
         <div class="form-group">
           <label>単位</label>

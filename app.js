@@ -30,16 +30,21 @@ const App = {
     Storage.migrateToMoneynote();
     this.renderIngredientDatalist();
 
+    // スプレッドシート同期の完了を待たず、まずローカルデータで即座に画面を表示する
+    // （同期待ちで画面が真っ白のまま止まって見える問題を防ぐため）
+    this.navigate("home");
+
     if (typeof GasSync !== "undefined" && GasSync.isConfigured()) {
       try {
         Toast.show("スプレッドシートと同期しています...");
         await GasSync.pullAll();
+        this.renderIngredientDatalist();
+        this.navigate(this.currentPage); // 同期完了後、表示中の画面を最新データで再描画
       } catch (err) {
         console.error(err);
         Toast.show("スプレッドシートとの同期に失敗しました。オフラインのデータを表示します");
       }
     }
-    this.navigate("home");
   },
 
   navigate(pageKey) {

@@ -148,7 +148,7 @@ const Inventory = {
       <div class="form-row">
         <div class="form-group">
           <label>数量</label>
-          <input type="number" id="inv-quantity" class="input" step="0.01" value="1">
+          <input type="number" id="inv-quantity" class="input" step="1" value="1">
         </div>
         <div class="form-group">
           <label>単位</label>
@@ -200,7 +200,7 @@ const Inventory = {
       <div class="form-row">
         <div class="form-group">
           <label>数量</label>
-          <input type="number" id="inv-quantity" class="input" step="0.01" value="${item.quantity}">
+          <input type="number" id="inv-quantity" class="input" step="1" value="${item.quantity}">
         </div>
         <div class="form-group">
           <label>単位</label>
